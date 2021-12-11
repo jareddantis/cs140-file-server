@@ -89,7 +89,7 @@ int determine_request(char *cmdline) {
  */
 char *get_time() {
     time_t rawtime = time(0);
-    char *time_str = ctime(&rawtime);
+    char *time_str = strtok(ctime(&rawtime), "\n");
     return time_str;
 }
 
