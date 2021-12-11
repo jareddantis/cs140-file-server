@@ -4,6 +4,7 @@
 #include <semaphore.h>
 #include <pthread.h>
 #include <time.h>
+#include <unistd.h>
 
 /**
  * Constants to denote request types, for convenience.
@@ -18,6 +19,8 @@
  * To avoid race conditions with file accesses,
  * we keep track of open files in a linked list of path-semaphore objects.
  */
+OpenFileNode *open_files = NULL;
+sem_t open_files_lock;
 typedef struct OpenFile {
     char *file_path;
     sem_t lock;
@@ -26,7 +29,6 @@ typedef struct OpenFileNode {
     OpenFile *file;
     OpenFileNode *next;
 } OpenFileNode;
-OpenFileNode *open_files = NULL;
 
 /**
  * @fn void open_file(char *file_path)
@@ -49,6 +51,7 @@ void open_file(char *file_path) {
     }
 
     // File is not open, so create a new node and add it to the start of the list
+    sem_wait(&open_files_lock);
     file = malloc(sizeof(OpenFile));
     file->file_path = file_path;
     sem_init(&file->lock, 0, 1);
@@ -56,6 +59,7 @@ void open_file(char *file_path) {
     node->file = file;
     node->next = open_files;
     open_files = node;
+    sem_post(&open_files_lock);
 }
 
 /**
@@ -122,24 +126,24 @@ char *get_time() {
  * @fn void print_log(char *msg)
  * @brief Print a timestamped message to stdout.
  * 
- * @param thread_name The name of the thread that is printing the message.
+ * @param caller The name of the function or thread that is printing the message.
  * @param msg The message to print.
  */
-void print_log(char *thread_name, char *msg) {
+void print_log(char *caller, char *msg) {
     char *time_str = get_time();
-    printf("[%s][LOG] %s: %s\n", time_str, thread_name, msg);
+    printf("[%s][LOG] %s: %s\n", time_str, caller, msg);
 }
 
 /**
  * @fn void print_err(char *msg)
  * @brief Print a timestamped error message to stderr.'
  * 
- * @param thread_name The name of the thread that is printing the message.
+ * @param caller The name of the function or thread that is printing the message.
  * @param msg The error message to print.
  */
-void print_err(char *thread_name, char *msg) {
+void print_err(char *caller, char *msg) {
     char *time_str = get_time();
-    fprintf(stderr, "[%s][ERR] %s: %s\n", time_str, thread_name, msg);
+    fprintf(stderr, "[%s][ERR] %s: %s\n", time_str, caller, msg);
 }
 
 /**
@@ -151,7 +155,37 @@ void print_err(char *thread_name, char *msg) {
  * @param file_path Path to the file, consisting of at most 50 characters.
  * @param text Text to write to the file, consisting of at most 50 characters.
  */
-void write_file(char *file_path, char *text) {}
+void write_file(char *file_path, char *text) {
+    FILE *file;
+    char *log_line;
+    int wait_us;
+
+    // Lock the file path, or wait if it's locked by another thread
+    open_file(file_path);
+
+    // Open the file
+    file = fopen(file_path, "a");
+    if (file == NULL) {
+        // Could not open file. Print error.
+        // 50 chars for the file path, 32 chars for the format string.
+        log_line = malloc(83);
+        sprintf(log_line, "Cannot open file \"%s\" for writing.", file_path);
+        print_err("write_file", log_line);
+        free(log_line);
+        return;
+    }
+
+    // Write the text to the file
+    fprintf(file, "%s\n", text);
+
+    // Project requirement: Wait 25ms per character written
+    wait_us = strlen(text) * 25 * 1000;
+    usleep(wait_us);
+
+    // Close the file
+    fclose(file);
+    close_file(file_path);
+}
 
 /**
  * @fn void read_file(char *file_path, char *cmdline)
@@ -283,10 +317,16 @@ void *master_thread() {
 }
 
 /**
- * The main function will do only one thing: spawn the master thread.
+ * @fn int main(...)
+ * @brief Main function.
+ *        This function will initialize all semaphores
+ *        and spawn the master thread.
  */
 int main(int argc, char *argv[]) {
     pthread_t master;
+
+    // Initialize lock on open_files
+    sem_init(&open_files_lock, 0, 1);
 
     // Create master thread
     printf("Starting file server...\n");
