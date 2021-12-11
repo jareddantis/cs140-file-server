@@ -394,7 +394,7 @@ void *worker_thread(void *arg) {
     // All valid command lines contain the file path as the second argument.
     // Extract this from the command line.
     cmd = strtok(cmdline, " ");
-    file_path = strtok(cmdline, " ");
+    file_path = strtok(NULL, " ");
     if (file_path == NULL) {
         print_err("worker", "Missing file path.");
         parcel->return_value = -1;
