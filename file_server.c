@@ -47,7 +47,7 @@
 /**
  * We can't return values from threads, but we *can* pass a pointer to
  * a preallocated return value variable to them. Thus we make use of a
- * struct for packaging thread arguments and return values into a neat
+ * struct for bundling thread arguments and return values into a neat
  * little package.
  */
 typedef struct thread_parcel ThreadParcel;
@@ -60,6 +60,7 @@ struct thread_parcel {
  * To avoid race conditions with file accesses,
  * we keep track of open files in a linked list of path-semaphore objects.
  */
+#define WAIT_DEALLOC   3
 typedef struct open_file_obj OpenFile;
 typedef struct open_file_node OpenFileNode;
 struct open_file_obj {
@@ -69,6 +70,7 @@ struct open_file_obj {
 struct open_file_node {
     OpenFile *file;
     OpenFileNode *next;
+    int ticks_before_dealloc;     // When this reaches 0, the node is deallocated.
 };
 sem_t open_files_lock;
 OpenFileNode *open_files = NULL;
@@ -153,7 +155,7 @@ void print_log(char *caller, char *msg, int is_error) {
  * @param file_path The path of the file to open.
  */
 void open_file(char *file_path) {
-    OpenFileNode *node;
+    OpenFileNode *node, *prev;
     OpenFile *file;
 
     // Check if the file is already open
@@ -164,7 +166,18 @@ void open_file(char *file_path) {
             sem_wait(&node->file->lock);
             return;
         }
-        node = node->next;
+
+        // Tick the node's dealloc timer. If it reaches 0, deallocate it.
+        node->ticks_before_dealloc--;
+        if (node->ticks_before_dealloc == 0) {
+            prev = node;
+            node = node->next;
+            free(prev->file);
+            free(prev);
+        } else {
+            // Move to the next node
+            node = node->next;
+        }
     }
 
     // File is not open, so create a new node and add it to the start of the list
@@ -175,6 +188,7 @@ void open_file(char *file_path) {
     node = malloc(sizeof(OpenFileNode));
     node->file = file;
     node->next = open_files;
+    node->ticks_before_dealloc = WAIT_DEALLOC;
     open_files = node;
     sem_post(&open_files_lock);
 }
