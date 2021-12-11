@@ -159,15 +159,16 @@ void print_err(char *caller, char *msg) {
 }
 
 /**
- * @fn void write_file(char *file_path, char *text)
+ * @fn int write_file(char *file_path, char *text)
  * @brief Write text to a file located at *file_path.
  *        If the file already exists, append text to it.
  *        If the file does not exist, create it and write text to it.
  * 
  * @param file_path Path to the file, consisting of at most 50 characters.
  * @param text Text to write to the file.
+ * @return 0 on success, -1 on failure.
  */
-void write_file(char *file_path, char *text) {
+int write_file(char *file_path, char *text) {
     FILE *file;
     char *log_line;
     int wait_us = 25000;
@@ -200,7 +201,7 @@ void write_file(char *file_path, char *text) {
 }
 
 /**
- * @fn void read_file(char *file_path, char *cmdline)
+ * @fn int read_file(char *file_path, char *cmdline)
  * @brief Append text from a file located at *file_path to <READ_FILE>.
  *        If the file exists, append the following to <READ_FILE>:
  *            <cmdline>: <contents>\n
@@ -212,8 +213,9 @@ void write_file(char *file_path, char *text) {
  * @param src_path Path to the source file, consisting of at most 50 characters.
  * @param dest_path Path to the destination file, consisting of at most 50 characters.
  * @param cmdline Command line used to call the function. NULL if called from a thread.
+ * @return 0 on success, -1 on failure.
  */
-void read_file(char *src_path, char *dest_path, char *cmdline) {
+int read_file(char *src_path, char *dest_path, char *cmdline) {
     FILE *src, *dest;
     char *log_line, buf[READ_BUF_SIZE];
     size_t read_size;
@@ -228,7 +230,7 @@ void read_file(char *src_path, char *dest_path, char *cmdline) {
         sprintf(log_line, "Cannot open file \"%s\" for appending.", dest_path);
         print_err("read_file", log_line);
         free(log_line);
-        return;
+        return -1;
     }
 
     // Check if file exists
@@ -256,11 +258,14 @@ void read_file(char *src_path, char *dest_path, char *cmdline) {
         sprintf(log_line, "Cannot open file \"%s\" for reading.", src_path);
         print_err("read_file", log_line);
         free(log_line);
+        return -1;
     }
+
+    return 0;
 }
 
 /**
- * @fn void empty_file(char *file_path, char *cmdline)
+ * @fn int empty_file(char *file_path, char *cmdline)
  * @brief Empty the contents of a file located at *file_path into <EMPTY_FILE>.
  *        If the file exists, append the following to <EMPTY_FILE>:
  *           <cmdline>: FILE EMPTY\n
@@ -270,14 +275,17 @@ void read_file(char *src_path, char *dest_path, char *cmdline) {
  * 
  * @param file_path Path to the file, consisting of at most 50 characters.
  * @param cmdline Command line used to call the function.
+ * @return 0 on success, -1 on failure.
  */
-void empty_file(char *file_path, char *cmdline) {}
+int empty_file(char *file_path, char *cmdline) {}
 
 /**
  * @fn int *worker_thread(char *cmdline)
  * @brief Worker thread that handles a single user request.
  *        This thread will receive a request from the master thread,
  *        parse the request, and handle the request accordingly.
+ * 
+ * @return 0 on success, -1 on failure.
  */
 int *worker_thread(char *cmdline) {
     char *cmd, *file_path, text[51];
@@ -287,7 +295,7 @@ int *worker_thread(char *cmdline) {
     request_type = determine_request(cmdline);
     if (request_type == REQUEST_INVALID) {
         print_err("worker", "Invalid command.");
-        return 1;
+        return -1;
     }
 
     // All valid command lines contain the file path as the second argument.
@@ -296,7 +304,7 @@ int *worker_thread(char *cmdline) {
     file_path = strtok(cmdline, " ");
     if (file_path == NULL) {
         print_err("worker", "Missing file path");
-        return 1;
+        return -1;
     }
 
     // Optionally, the command line may contain free text as the third argument.
@@ -305,14 +313,14 @@ int *worker_thread(char *cmdline) {
         // Make sure we're writing to a file.
         if (request_type != REQUEST_WRITE) {
             print_err("worker", "Free text argument only valid for write requests.");
-            return 1;
+            return -1;
         }
 
         // How long is the free text?
         text_len = strlen(cmdline) - (strlen(cmd) + strlen(file_path));
         if (text_len > 50) {
             print_err("worker", "Free text argument is longer than 50 characters");
-            return 1;
+            return -1;
         }
 
         // Extract the free text using strncpy.
@@ -324,17 +332,14 @@ int *worker_thread(char *cmdline) {
     // we can now handle the request.
     switch (request_type) {
         case REQUEST_READ:
-            read_file(file_path, READ_FILE, cmdline);
-            break;
+            return read_file(file_path, READ_FILE, cmdline);
         case REQUEST_WRITE:
-            write_file(file_path, text);
-            break;
+            return write_file(file_path, text);
         case REQUEST_EMPTY:
-            empty_file(file_path, cmdline);
-            break;
+            return empty_file(file_path, cmdline);
+        default:
+            return -1;
     }
-
-    return 0;
 }
 
 /**
@@ -391,6 +396,9 @@ int main(int argc, char *argv[]) {
 
     // Initialize lock on open_files
     sem_init(&open_files_lock, 0, 1);
+
+    // Seed RNG
+	srand(time(0));
 
     // Create master thread
     printf("Starting file server...\n");
