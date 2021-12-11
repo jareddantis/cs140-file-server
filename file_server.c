@@ -202,7 +202,7 @@ void close_file(char *file_path) {
  * @param text Text to write to the file.
  * @return 0 on success, -1 on failure.
  */
-int write_file(char *file_path, char *text) {
+int write_file(char *file_path, char *text, int trailing_newline) {
     FILE *file;
     char *log_line;
     int wait_us = 25000;
@@ -223,7 +223,10 @@ int write_file(char *file_path, char *text) {
     }
 
     // Write the text to the file
-    fprintf(file, "%s\n", text);
+    if (trailing_newline)
+        fprintf(file, "%s\n", text);
+    else
+        fprintf(file, "%s", text);
 
     // Project requirement: Wait 25ms per character written
     wait_us *= strlen(text);
@@ -430,7 +433,7 @@ void *worker_thread(void *arg) {
         case REQUEST_READ:
             parcel->return_value = read_file(file_path, READ_FILE, cmdline);
         case REQUEST_WRITE:
-            parcel->return_value = write_file(file_path, text);
+            parcel->return_value = write_file(file_path, text, 1);
         case REQUEST_EMPTY:
             parcel->return_value = empty_file(file_path, cmdline);
         default:
@@ -472,12 +475,8 @@ void *master_thread() {
         // Create log line with timestamp
         timestamp = get_time();
         log_line = malloc(strlen(timestamp) + strlen(cmdline) + 2);
-        sprintf(log_line, "[%s] %s\n", timestamp, cmdline);
-
-        // Since the master thread is the only thread that can write to the log file,
-        // and that this thread only dies when the whole server dies,
-        // we do not have to worry about locking it.
-        write_file(COMMANDS_FILE, log_line);
+        sprintf(log_line, "[%s] %s", timestamp, cmdline);
+        write_file(COMMANDS_FILE, log_line, 1);
         free(log_line);
 
         // Create a new thread to handle the request
