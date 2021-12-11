@@ -5,10 +5,84 @@
 #include <pthread.h>
 #include <time.h>
 
+/**
+ * Constants to denote request types, for convenience.
+ * See determine_request().
+ */
 #define REQUEST_INVALID 0
 #define REQUEST_READ    1
 #define REQUEST_WRITE   2
 #define REQUEST_EMPTY   3
+
+/**
+ * To avoid race conditions with file accesses,
+ * we keep track of open files in a linked list of path-semaphore objects.
+ */
+typedef struct OpenFile {
+    char *file_path;
+    sem_t lock;
+} OpenFile;
+typedef struct OpenFileNode {
+    OpenFile *file;
+    OpenFileNode *next;
+} OpenFileNode;
+OpenFileNode *open_files = NULL;
+
+/**
+ * @fn void open_file(char *file_path)
+ * @brief Marks a file path as currently open, and waits for a lock on it.
+ * @param file_path The path of the file to open.
+ */
+void open_file(char *file_path) {
+    OpenFileNode *node;
+    OpenFile *file;
+
+    // Check if the file is already open
+    node = open_files;
+    while (node != NULL) {
+        if (strcmp(node->file->file_path, file_path) == 0) {
+            // File is already open, so just wait for the lock
+            sem_wait(&node->file->lock);
+            return;
+        }
+        node = node->next;
+    }
+
+    // File is not open, so create a new node and add it to the start of the list
+    file = malloc(sizeof(OpenFile));
+    file->file_path = file_path;
+    sem_init(&file->lock, 0, 1);
+    node = malloc(sizeof(OpenFileNode));
+    node->file = file;
+    node->next = open_files;
+    open_files = node;
+}
+
+/**
+ * @fn void close_file(char *file_path)
+ * @brief Marks a file path as no longer open, and releases the lock on it.
+ * @param file_path The path of the file to close.
+ */
+void close_file(char *file_path) {
+    OpenFileNode *node;
+    char *log_line;
+    
+    node = open_files;
+    while (node != NULL) {
+        if (strcmp(node->file->file_path, file_path) == 0) {
+            // Release the lock
+            sem_post(&node->file->lock);
+            return;
+        }
+        node = node->next;
+    }
+
+    // File not found. Print error.
+    // 50 chars for the file path, 30 chars for the format string.
+    log_line = malloc(81);
+    sprintf(log_line, "Cannot close unopened file \"%s\".", file_path);
+    print_err("close_file", log_line);
+}
 
 /**
  * @fn int determine_request(char *cmdline)
