@@ -445,8 +445,8 @@ void *master_thread() {
     // The longest command name is 5 characters,
     // and the file path and text are both at most 50 characters,
     // therefore including whitespace each command line is at most 107 characters.
-    // This leaves us with a total of 108, including the NULL terminator.
-    char *timestamp, *log_line, cmdline[108];
+    // This leaves us with a total of 109, including the newline and a NULL terminator.
+    char *timestamp, *log_line, cmdline[109];
     ThreadParcel *parcel;
     pthread_t thread;
 
@@ -454,7 +454,11 @@ void *master_thread() {
     while (1) {
         // Read user input
         printf("> ");
-        scanf("%s\n", cmdline);
+        fgets(cmdline, 109, stdin);
+
+        // Remove newline from input
+        // https://stackoverflow.com/a/28462221/3350320
+        cmdline[strcspn(cmdline, "\n")] = '\0';
         print_log("master", cmdline);
 
         // Create log line with timestamp
