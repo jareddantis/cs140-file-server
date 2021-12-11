@@ -387,6 +387,7 @@ void *worker_thread(void *arg) {
     if (request_type == REQUEST_INVALID) {
         print_err("worker", "Invalid command.");
         parcel->return_value = -1;
+        return;
     }
 
     // All valid command lines contain the file path as the second argument.
@@ -394,8 +395,9 @@ void *worker_thread(void *arg) {
     cmd = strtok(cmdline, " ");
     file_path = strtok(cmdline, " ");
     if (file_path == NULL) {
-        print_err("worker", "Missing file path");
+        print_err("worker", "Missing file path.");
         parcel->return_value = -1;
+        return;
     }
 
     // Optionally, the command line may contain free text as the third argument.
@@ -405,13 +407,15 @@ void *worker_thread(void *arg) {
         if (request_type != REQUEST_WRITE) {
             print_err("worker", "Free text argument only valid for write requests.");
             parcel->return_value = -1;
+            return;
         }
 
         // How long is the free text?
         text_len = strlen(cmdline) - (strlen(cmd) + strlen(file_path));
         if (text_len > 50) {
-            print_err("worker", "Free text argument is longer than 50 characters");
+            print_err("worker", "Free text argument is longer than 50 characters.");
             parcel->return_value = -1;
+            return;
         }
 
         // Extract the free text using strncpy.
