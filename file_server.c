@@ -206,42 +206,54 @@ void write_file(char *file_path, char *text) {
  *            <cmdline>: <contents>\n
  *        If the file does not exist, append the following to <READ_FILE>:
  *            <cmdline>: FILE DNE\n
+ *        If cmdline is NULL, then this function is assumed to be called as part of another
+ *        thread's operations, and should therefore not print cmdline and FILE DNE.
  * 
  * @param src_path Path to the source file, consisting of at most 50 characters.
  * @param dest_path Path to the destination file, consisting of at most 50 characters.
- * @param cmdline Command line used to call the function.
+ * @param cmdline Command line used to call the function. NULL if called from a thread.
  */
 void read_file(char *src_path, char *dest_path, char *cmdline) {
     FILE *src, *dest;
     char *log_line, buf[READ_BUF_SIZE];
     size_t read_size;
 
-    // Open source and destination
-    open_file(src_path);
+    // Open destination first
     open_file(dest_path);
-    src = fopen(src_path, "r");
     dest = fopen(dest_path, "a");
+    if (dest == NULL) {
+        // Could not open file. Print error.
+        // 50 chars for the file path, 34 chars for the format string.
+        log_line = malloc(85);
+        sprintf(log_line, "Cannot open file \"%s\" for appending.", dest_path);
+        print_err("read_file", log_line);
+        free(log_line);
+        return;
+    }
 
-    // Read from source and write to dest in chunks
-    if (src != NULL && dest != NULL) {
+    // Check if file exists
+    if (access(src_path, F_OK) != 0) {
+        // File does not exist. Print FILE DNE to READ_FILE.
+        if (cmdline != NULL)
+            fprintf(dest, "%s: FILE DNE\n", cmdline);
+    }
+
+    // Open source
+    open_file(src_path);
+    src = fopen(src_path, "r");
+    if (src != NULL) {
         // Append the command line to dest
         if (cmdline != NULL)
             fprintf(dest, "%s: ", cmdline);
 
-        // Append source content to dest
-        while ((read_size = fread(buf, 1, READ_BUF_SIZE, src)) > 0) {
+        // Append source content to dest in chunks of READ_BUF_SIZE
+        while ((read_size = fread(buf, 1, READ_BUF_SIZE, src)) > 0)
             fwrite(buf, 1, read_size, dest);
-        }
     } else {
         // Could not open file. Print error.
         // 50 chars for the file path, 32 chars for the format string.
         log_line = malloc(83);
-
-        if (src == NULL)
-            sprintf(log_line, "Cannot open file \"%s\" for reading.", src_path);
-        else
-            sprintf(log_line, "Cannot open file \"%s\" for appending.", dest_path);
-
+        sprintf(log_line, "Cannot open file \"%s\" for reading.", src_path);
         print_err("read_file", log_line);
         free(log_line);
     }
