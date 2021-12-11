@@ -207,27 +207,29 @@ void write_file(char *file_path, char *text) {
  *        If the file does not exist, append the following to <READ_FILE>:
  *            <cmdline>: FILE DNE\n
  * 
- * @param file_path Path to the file, consisting of at most 50 characters.
+ * @param src_path Path to the source file, consisting of at most 50 characters.
+ * @param dest_path Path to the destination file, consisting of at most 50 characters.
  * @param cmdline Command line used to call the function.
  */
-void read_file(char *file_path, char *cmdline) {
-    FILE *source, *dest;
+void read_file(char *src_path, char *dest_path, char *cmdline) {
+    FILE *src, *dest;
     char *log_line, buf[READ_BUF_SIZE];
     size_t read_size;
 
     // Open source and destination
-    open_file(file_path);
-    open_file(READ_FILE);
-    source = fopen(file_path, "r");
-    dest = fopen(READ_FILE, "a");
+    open_file(src_path);
+    open_file(dest_path);
+    src = fopen(src_path, "r");
+    dest = fopen(dest_path, "a");
 
     // Read from source and write to dest in chunks
-    if (source != NULL && dest != NULL) {
-        // Append the command line to READ_FILE
-        fprintf(dest, "%s: ", cmdline);
+    if (src != NULL && dest != NULL) {
+        // Append the command line to dest
+        if (cmdline != NULL)
+            fprintf(dest, "%s: ", cmdline);
 
-        // Append source content to READ_FILE
-        while ((read_size = fread(buf, 1, READ_BUF_SIZE, source)) > 0) {
+        // Append source content to dest
+        while ((read_size = fread(buf, 1, READ_BUF_SIZE, src)) > 0) {
             fwrite(buf, 1, read_size, dest);
         }
     } else {
@@ -235,10 +237,10 @@ void read_file(char *file_path, char *cmdline) {
         // 50 chars for the file path, 32 chars for the format string.
         log_line = malloc(83);
 
-        if (source == NULL)
-            sprintf(log_line, "Cannot open file \"%s\" for reading.", file_path);
+        if (src == NULL)
+            sprintf(log_line, "Cannot open file \"%s\" for reading.", src_path);
         else
-            sprintf(log_line, "Cannot open file \"%s\" for appending.", READ_FILE);
+            sprintf(log_line, "Cannot open file \"%s\" for appending.", dest_path);
 
         print_err("read_file", log_line);
         free(log_line);
@@ -247,11 +249,11 @@ void read_file(char *file_path, char *cmdline) {
 
 /**
  * @fn void empty_file(char *file_path, char *cmdline)
- * @brief Empty the contents of a file located at *file_path.
- *        If the file exists, append the following to empty.txt:
+ * @brief Empty the contents of a file located at *file_path into <EMPTY_FILE>.
+ *        If the file exists, append the following to <EMPTY_FILE>:
  *           <cmdline>: FILE EMPTY\n
  *        and empty the contents of the file.
- *        If the file does not exist, append the following to empty.txt:
+ *        If the file does not exist, append the following to <EMPTY_FILE>:
  *           <cmdline>: FILE ALREADY EMPTY\n
  * 
  * @param file_path Path to the file, consisting of at most 50 characters.
@@ -310,7 +312,7 @@ int *worker_thread(char *cmdline) {
     // we can now handle the request.
     switch (request_type) {
         case REQUEST_READ:
-            read_file(file_path, cmdline);
+            read_file(file_path, READ_FILE, cmdline);
             break;
         case REQUEST_WRITE:
             write_file(file_path, text);
