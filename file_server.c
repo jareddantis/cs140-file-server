@@ -153,7 +153,7 @@ void print_err(char *caller, char *msg) {
  *        If the file does not exist, create it and write text to it.
  * 
  * @param file_path Path to the file, consisting of at most 50 characters.
- * @param text Text to write to the file, consisting of at most 50 characters.
+ * @param text Text to write to the file.
  */
 void write_file(char *file_path, char *text) {
     FILE *file;
@@ -251,6 +251,10 @@ int *worker_thread(char *cmdline) {
 
         // How long is the free text?
         text_len = strlen(cmdline) - (strlen(cmd) + strlen(file_path));
+        if (text_len > 50) {
+            print_err("worker", "Free text argument is longer than 50 characters");
+            return 1;
+        }
 
         // Extract the free text using strncpy.
         strncpy(text, cmdline + strlen(cmd) + strlen(file_path), text_len);
