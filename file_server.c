@@ -7,6 +7,13 @@
 #include <unistd.h>
 
 /**
+ * Paths to files written to by the server.
+ */
+#define READ_FILE       "read.txt"
+#define EMPTY_FILE      "empty.txt"
+#define COMMANDS_FILE   "commands.txt"
+
+/**
  * Constants to denote request types, for convenience.
  * See determine_request().
  */
@@ -14,6 +21,11 @@
 #define REQUEST_READ    1
 #define REQUEST_WRITE   2
 #define REQUEST_EMPTY   3
+
+/**
+ * Buffer size for reading from files.
+ */
+#define READ_BUF_SIZE   1024
 
 /**
  * To avoid race conditions with file accesses,
@@ -158,7 +170,7 @@ void print_err(char *caller, char *msg) {
 void write_file(char *file_path, char *text) {
     FILE *file;
     char *log_line;
-    int wait_us;
+    int wait_us = 25000;
 
     // Lock the file path, or wait if it's locked by another thread
     open_file(file_path);
@@ -179,7 +191,7 @@ void write_file(char *file_path, char *text) {
     fprintf(file, "%s\n", text);
 
     // Project requirement: Wait 25ms per character written
-    wait_us = strlen(text) * 25 * 1000;
+    wait_us *= strlen(text);
     usleep(wait_us);
 
     // Close the file
@@ -189,16 +201,49 @@ void write_file(char *file_path, char *text) {
 
 /**
  * @fn void read_file(char *file_path, char *cmdline)
- * @brief Read text from a file located at *file_path.
- *        If the file exists, append the following to read.txt:
+ * @brief Append text from a file located at *file_path to <READ_FILE>.
+ *        If the file exists, append the following to <READ_FILE>:
  *            <cmdline>: <contents>\n
- *        If the file does not exist, append the following to read.txt:
+ *        If the file does not exist, append the following to <READ_FILE>:
  *            <cmdline>: FILE DNE\n
  * 
  * @param file_path Path to the file, consisting of at most 50 characters.
  * @param cmdline Command line used to call the function.
  */
-void read_file(char *file_path, char *cmdline) {}
+void read_file(char *file_path, char *cmdline) {
+    FILE *source, *dest;
+    char *log_line, buf[READ_BUF_SIZE];
+    size_t read_size;
+
+    // Open source and destination
+    open_file(file_path);
+    open_file(READ_FILE);
+    source = fopen(file_path, "r");
+    dest = fopen(READ_FILE, "a");
+
+    // Read from source and write to dest in chunks
+    if (source != NULL && dest != NULL) {
+        // Append the command line to READ_FILE
+        fprintf(dest, "%s: ", cmdline);
+
+        // Append source content to READ_FILE
+        while ((read_size = fread(buf, 1, READ_BUF_SIZE, source)) > 0) {
+            fwrite(buf, 1, read_size, dest);
+        }
+    } else {
+        // Could not open file. Print error.
+        // 50 chars for the file path, 32 chars for the format string.
+        log_line = malloc(83);
+
+        if (source == NULL)
+            sprintf(log_line, "Cannot open file \"%s\" for reading.", file_path);
+        else
+            sprintf(log_line, "Cannot open file \"%s\" for appending.", READ_FILE);
+
+        print_err("read_file", log_line);
+        free(log_line);
+    }
+}
 
 /**
  * @fn void empty_file(char *file_path, char *cmdline)
@@ -283,7 +328,7 @@ int *worker_thread(char *cmdline) {
  * @brief Master thread that handles all user requests.
  *        This thread will continuously receive user requests from stdin
  *        and spawn worker threads to handle said requests accordingly,
- *        appending each command to a file named commands.txt along with
+ *        appending each command to a file named <COMMANDS_FILE> along with
  *        the timestamp of the command.
  */
 void *master_thread() {
@@ -308,7 +353,7 @@ void *master_thread() {
         // Since the master thread is the only thread that can write to the log file,
         // and that this thread only dies when the whole server dies,
         // we do not have to worry about locking it.
-        write_file("commands.txt", log_line);
+        write_file(COMMANDS_FILE, log_line);
         free(log_line);
 
         // Create a new thread to handle the request
