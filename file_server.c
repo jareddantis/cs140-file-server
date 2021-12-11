@@ -167,7 +167,6 @@ void close_file(char *file_path) {
         if (strcmp(node->file->file_path, file_path) == 0) {
             // Release the lock
             sem_post(&node->file->lock);
-            return;
         }
         node = node->next;
     }
@@ -207,7 +206,7 @@ int write_file(char *file_path, char *text) {
         sprintf(log_line, "Cannot open file \"%s\" for writing.", file_path);
         print_err("write_file", log_line);
         free(log_line);
-        return;
+        return -1;
     }
 
     // Write the text to the file
@@ -220,6 +219,7 @@ int write_file(char *file_path, char *text) {
     // Close the file
     fclose(file);
     close_file(file_path);
+    return 0;
 }
 
 /**
