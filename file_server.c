@@ -103,6 +103,47 @@ int determine_request(char *cmdline) {
 }
 
 /**
+ * @fn void deallocate_old_files(char *just_closed)
+ * @brief Deallocates old files from the open file list.
+ *        "Old" files are those that have been open for more than
+ *        WAIT_DEALLOC ticks, where each tick is marked by a call to close_file().
+ * 
+ * @param just_closed The path of the file that was just closed, which we exclude from ticking.
+ */
+void deallocate_old_files(char *just_closed) {
+    OpenFileNode *curr = open_files;
+    OpenFileNode *prev = NULL;
+    int is_first = 1;
+
+    sem_wait(&open_files_lock);
+    while (curr != NULL) {
+        // Skip the file that was just closed
+        if (strcmp(curr->file->file_path, just_closed) == 0) {
+            prev = curr;
+            curr = curr->next;
+            continue;
+        }
+
+        // Tick the node's dealloc timer. If it reaches 0, deallocate it.
+        curr->ticks_before_dealloc--;
+        if (curr->ticks_before_dealloc == 0) {
+            prev = curr;
+            curr = curr->next;
+            free(prev->file);
+            free(prev);
+
+            if (is_first)
+                open_files = curr;
+        } else {
+            // Move to the next node
+            curr = curr->next;
+            is_first = 0;
+        }
+    }
+    sem_post(&open_files_lock);
+}
+
+/**
  * @fn char *get_time()
  * @brief Create a string with the current timestamp.
  * @return A string with the current time in the ctime format "Www Mmm dd hh:mm:ss yyyy"
@@ -157,9 +198,8 @@ void print_log(char *caller, char *msg, int is_error) {
  * @param file_path The path of the file to open.
  */
 void open_file(char *file_path) {
-    OpenFileNode *node, *prev;
+    OpenFileNode *node;
     OpenFile *file;
-    int is_first = 1;
 
     // Check if the file is already open
     node = open_files;
@@ -171,22 +211,6 @@ void open_file(char *file_path) {
             // Reset deallocation timer
             node->ticks_before_dealloc = WAIT_DEALLOC;
             return;
-        }
-
-        // Tick the node's dealloc timer. If it reaches 0, deallocate it.
-        node->ticks_before_dealloc--;
-        if (node->ticks_before_dealloc == 0) {
-            prev = node;
-            node = node->next;
-            free(prev->file);
-            free(prev);
-
-            if (is_first)
-                open_files = node;
-        } else {
-            // Move to the next node
-            node = node->next;
-            is_first = 0;
         }
     }
 
@@ -221,6 +245,9 @@ void close_file(char *file_path) {
         }
         node = node->next;
     }
+
+    // Tick all deallocation timers
+    deallocate_old_files(file_path);
 
     // File not found. Print error.
     // 50 chars for the file path, 30 chars for the format string.
