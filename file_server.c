@@ -157,6 +157,7 @@ void print_log(char *caller, char *msg, int is_error) {
 void open_file(char *file_path) {
     OpenFileNode *node, *prev;
     OpenFile *file;
+    int is_first = 1;
 
     // Check if the file is already open
     node = open_files;
@@ -174,9 +175,13 @@ void open_file(char *file_path) {
             node = node->next;
             free(prev->file);
             free(prev);
+
+            if (is_first)
+                open_files = node;
         } else {
             // Move to the next node
             node = node->next;
+            is_first = 0;
         }
     }
 
