@@ -559,7 +559,7 @@ int main(int argc, char *argv[]) {
     sem_init(&open_files_lock, 0, 1);
 
     // Seed RNG
-	srand(time(0));
+    srand(time(0));
 
     // Create master thread
     print_log("main", "Starting file server...", 0);
