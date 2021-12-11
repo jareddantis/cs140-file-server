@@ -44,6 +44,71 @@ struct open_file_node {
 sem_t open_files_lock;
 OpenFileNode *open_files = NULL;
 
+/*****************************
+ *      Helper functions     *
+ *****************************/
+
+/**
+ * @fn int determine_request(char *cmdline)
+ * @brief Determines the type of request from the command line.
+ * 
+ * @param cmdline The command line from the client.
+ * @return The type of request.
+ */
+int determine_request(char *cmdline) {
+    // Check if the command line is empty.
+    if (strlen(cmdline) == 0)
+        return REQUEST_INVALID;
+
+    if (strncmp(cmdline, "read", 4) == 0)
+        return REQUEST_READ;
+    else if (strncmp(cmdline, "write", 5) == 0)
+        return REQUEST_WRITE;
+    else if (strncmp(cmdline, "empty", 5) == 0)
+        return REQUEST_EMPTY;
+
+    return REQUEST_INVALID;
+}
+
+/**
+ * @fn char *get_time()
+ * @brief Create a string with the current timestamp.
+ * @return A string with the current time in the ctime format "Www Mmm dd hh:mm:ss yyyy"
+ */
+char *get_time() {
+    time_t rawtime = time(0);
+    char *time_str = ctime(&rawtime);
+    return time_str;
+}
+
+/**
+ * @fn void print_log(char *msg)
+ * @brief Print a timestamped message to stdout.
+ * 
+ * @param caller The name of the function or thread that is printing the message.
+ * @param msg The message to print.
+ */
+void print_log(char *caller, char *msg) {
+    char *time_str = get_time();
+    printf("[%s][LOG] %s: %s\n", time_str, caller, msg);
+}
+
+/**
+ * @fn void print_err(char *msg)
+ * @brief Print a timestamped error message to stderr.'
+ * 
+ * @param caller The name of the function or thread that is printing the message.
+ * @param msg The error message to print.
+ */
+void print_err(char *caller, char *msg) {
+    char *time_str = get_time();
+    fprintf(stderr, "[%s][ERR] %s: %s\n", time_str, caller, msg);
+}
+
+/*****************************
+ *      Command handlers     *
+ *****************************/
+
 /**
  * @fn void open_file(char *file_path)
  * @brief Marks a file path as currently open, and waits for a lock on it.
@@ -101,63 +166,6 @@ void close_file(char *file_path) {
     sprintf(log_line, "Cannot close unopened file \"%s\".", file_path);
     print_err("close_file", log_line);
     free(log_line);
-}
-
-/**
- * @fn int determine_request(char *cmdline)
- * @brief Determines the type of request from the command line.
- * 
- * @param cmdline The command line from the client.
- * @return The type of request.
- */
-int determine_request(char *cmdline) {
-    // Check if the command line is empty.
-    if (strlen(cmdline) == 0)
-        return REQUEST_INVALID;
-
-    if (strncmp(cmdline, "read", 4) == 0)
-        return REQUEST_READ;
-    else if (strncmp(cmdline, "write", 5) == 0)
-        return REQUEST_WRITE;
-    else if (strncmp(cmdline, "empty", 5) == 0)
-        return REQUEST_EMPTY;
-
-    return REQUEST_INVALID;
-}
-
-/**
- * @fn char *get_time()
- * @brief Create a string with the current timestamp.
- * @return A string with the current time in the ctime format "Www Mmm dd hh:mm:ss yyyy"
- */
-char *get_time() {
-    time_t rawtime = time(0);
-    char *time_str = ctime(&rawtime);
-    return time_str;
-}
-
-/**
- * @fn void print_log(char *msg)
- * @brief Print a timestamped message to stdout.
- * 
- * @param caller The name of the function or thread that is printing the message.
- * @param msg The message to print.
- */
-void print_log(char *caller, char *msg) {
-    char *time_str = get_time();
-    printf("[%s][LOG] %s: %s\n", time_str, caller, msg);
-}
-
-/**
- * @fn void print_err(char *msg)
- * @brief Print a timestamped error message to stderr.'
- * 
- * @param caller The name of the function or thread that is printing the message.
- * @param msg The error message to print.
- */
-void print_err(char *caller, char *msg) {
-    char *time_str = get_time();
-    fprintf(stderr, "[%s][ERR] %s: %s\n", time_str, caller, msg);
 }
 
 /**
@@ -329,6 +337,10 @@ int empty_file(char *file_path, char *cmdline) {
 
     return 0;
 }
+
+/*****************************
+ *       Thread def'ns       *
+ *****************************/
 
 /**
  * @fn int *worker_thread(char *cmdline)
