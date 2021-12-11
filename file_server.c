@@ -490,10 +490,13 @@ void *worker_thread(void *arg) {
     switch (request_type) {
         case REQUEST_READ:
             parcel->return_value = read_file(file_path, READ_FILE, parcel->cmdline);
+            break;
         case REQUEST_WRITE:
             parcel->return_value = write_file(file_path, text, 1);
+            break;
         case REQUEST_EMPTY:
             parcel->return_value = empty_file(file_path, parcel->cmdline);
+            break;
         default:
             parcel->return_value = -1;
     }
