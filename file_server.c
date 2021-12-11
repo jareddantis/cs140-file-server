@@ -167,6 +167,9 @@ void open_file(char *file_path) {
         if (strcmp(node->file->file_path, file_path) == 0) {
             // File is already open, so just wait for the lock
             sem_wait(&node->file->lock);
+            
+            // Reset deallocation timer
+            node->ticks_before_dealloc = WAIT_DEALLOC;
             return;
         }
 
