@@ -7,6 +7,18 @@
 #include <unistd.h>
 
 /**
+ * ANSI color codes for colored output.
+ * See print_log() and print_err().
+ * Adapted from https://stackoverflow.com/a/3219471/3350320.
+ */
+
+#define ANSI_RED        "\x1b[31m"
+#define ANSI_GREEN      "\x1b[32m"
+#define ANSI_YELLOW     "\x1b[33m"
+#define ANSI_CYAN       "\x1b[36m"
+#define ANSI_RESET      "\x1b[0m"
+
+/**
  * Paths to files written to by the server.
  */
 #define READ_FILE       "read.txt"
@@ -102,7 +114,7 @@ char *get_time() {
  */
 void print_log(char *caller, char *msg) {
     char *time_str = get_time();
-    printf("[%s][LOG] %s: %s\n", time_str, caller, msg);
+    printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
 }
 
 /**
@@ -114,7 +126,7 @@ void print_log(char *caller, char *msg) {
  */
 void print_err(char *caller, char *msg) {
     char *time_str = get_time();
-    fprintf(stderr, "[%s][ERR] %s: %s\n", time_str, caller, msg);
+    fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
 }
 
 /*****************************
@@ -486,13 +498,13 @@ int main(int argc, char *argv[]) {
 	srand(time(0));
 
     // Create master thread
-    printf("Starting file server...\n");
+    print_log("main", "Starting file server...");
     pthread_create(&master, NULL, master_thread, "master");
 
     // Wait for thread to finish
     pthread_join(master, NULL);
 
     // Exit
-    printf("Exiting file server...\n");
+    print_log("main", "Exiting file server...");
     return 0;
 }
