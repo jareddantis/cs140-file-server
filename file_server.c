@@ -454,7 +454,8 @@ void *master_thread() {
     while (1) {
         // Read user input
         printf("> ");
-        scanf("%s", cmdline);
+        scanf("%s\n", cmdline);
+        print_log("master", cmdline);
 
         // Create log line with timestamp
         timestamp = get_time();
@@ -471,6 +472,7 @@ void *master_thread() {
         parcel = malloc(sizeof(ThreadParcel));
         parcel->cmdline = cmdline;
         parcel->return_value = 0;
+        print_log("master", "Spawning new thread to handle request.");
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
             print_err("master", "Could not create worker thread.");
 
@@ -499,7 +501,7 @@ int main(int argc, char *argv[]) {
 
     // Create master thread
     print_log("main", "Starting file server...");
-    pthread_create(&master, NULL, master_thread, "master");
+    pthread_create(&master, NULL, master_thread, NULL);
 
     // Wait for thread to finish
     pthread_join(master, NULL);
