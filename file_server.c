@@ -112,7 +112,7 @@ void empty_file(char *file_path, char *cmdline) {}
  *        parse the request, and handle the request accordingly.
  */
 int *worker_thread(char *cmdline) {
-    char *cmd, *file_path, *text[51];
+    char *cmd, *file_path, text[51];
     int request_type, text_len;
 
     // Check what type of request the client sent.
@@ -178,7 +178,7 @@ void *master_thread() {
     // and the file path and text are both at most 50 characters,
     // therefore including whitespace each command line is at most 107 characters.
     // This leaves us with a total of 108, including the NULL terminator.
-    char cmdline[108];
+    char *timestamp, *log_line, cmdline[108];
     pthread_t thread;
 
     // Loop forever
@@ -187,8 +187,8 @@ void *master_thread() {
         scanf("%s", cmdline);
 
         // Create log line with timestamp
-        char *timestamp = get_time();
-        char *log_line = malloc(strlen(timestamp) + strlen(cmdline) + 2);
+        timestamp = get_time();
+        log_line = malloc(strlen(timestamp) + strlen(cmdline) + 2);
         sprintf(log_line, "[%s] %s\n", timestamp, cmdline);
 
         // Since the master thread is the only thread that can write to the log file,
@@ -211,9 +211,9 @@ void *master_thread() {
  */
 int main(int argc, char *argv[]) {
     pthread_t master;
-    printf("Starting file server...\n");
 
     // Create master thread
+    printf("Starting file server...\n");
     pthread_create(&master, NULL, master_thread, "master");
 
     // Wait for thread to finish
