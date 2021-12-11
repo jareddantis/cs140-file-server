@@ -422,7 +422,7 @@ int empty_file(char *file_path, char *cmdline) {
             // 50 chars for the file path, 33 chars for the format string.
             log_line = malloc(84);
             sprintf(log_line, "Cannot open file \"%s\" for emptying.", file_path);
-            print_log("read_file", log_line, 1);
+            print_log("empty_file", log_line, 1);
             free(log_line);
             return -1;
         }
