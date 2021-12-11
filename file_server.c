@@ -121,12 +121,14 @@ char *get_time() {
 void print_log(char *caller, char *msg, int is_error) {
     char *log_line, *time_str = get_time();
     ssize_t msg_len;
+    
+    // Always print errors to console
+    if (is_error)
+        fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
 
     if (LOG_TO_CONSOLE) {
-        if (is_error)
-            fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_GREEN "[ERR] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
-        else
-            printf(ANSI_YELLOW "[%s] " ANSI_RED "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
+        if (is_error == 0)
+            printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
     } else {
         if (is_error) {
             msg_len = snprintf(NULL, 0, "[%s] [ERR] %s: %s\n", time_str, caller, msg);
