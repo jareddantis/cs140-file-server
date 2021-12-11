@@ -425,7 +425,8 @@ void *worker_thread(void *arg) {
     int request_type, text_len;
 
     // Get cmdline from parcel
-    cmdline = parcel->cmdline;
+    cmdline = malloc(strlen(parcel->cmdline) + 1);
+    strcpy(cmdline, parcel->cmdline);
 
     // Check what type of request the client sent.
     request_type = determine_request(cmdline);
@@ -476,11 +477,11 @@ void *worker_thread(void *arg) {
     // we can now handle the request.
     switch (request_type) {
         case REQUEST_READ:
-            parcel->return_value = read_file(file_path, READ_FILE, cmdline);
+            parcel->return_value = read_file(file_path, READ_FILE, parcel->cmdline);
         case REQUEST_WRITE:
             parcel->return_value = write_file(file_path, text, 1);
         case REQUEST_EMPTY:
-            parcel->return_value = empty_file(file_path, cmdline);
+            parcel->return_value = empty_file(file_path, parcel->cmdline);
         default:
             parcel->return_value = -1;
     }
