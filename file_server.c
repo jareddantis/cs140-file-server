@@ -9,7 +9,7 @@
 /**
  * Set to 1 to print log to console, or to 0 to print to a log file.
  */
-#define LOG_TO_CONSOLE  1
+#define LOG_TO_CONSOLE  0
 
 /**
  * ANSI color codes for colored output.
