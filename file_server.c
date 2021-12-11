@@ -73,6 +73,7 @@ struct open_file_node {
     int ticks_before_dealloc;     // When this reaches 0, the node is deallocated.
 };
 sem_t open_files_lock;
+sem_t log_file_lock;
 OpenFileNode *open_files = NULL;
 
 /*****************************
@@ -122,6 +123,7 @@ char *get_time() {
  */
 void print_log(char *caller, char *msg, int is_error) {
     char *log_line, *time_str = get_time();
+    FILE *log_file;
     ssize_t msg_len;
     
     // Always print errors to console
@@ -132,16 +134,16 @@ void print_log(char *caller, char *msg, int is_error) {
         if (is_error == 0)
             printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
     } else {
-        if (is_error) {
-            msg_len = snprintf(NULL, 0, "[%s] [ERR] %s: %s\n", time_str, caller, msg);
-            log_line = malloc(msg_len + 1);
-            snprintf(log_line, msg_len + 1, "[%s] [ERR] %s: %s\n", time_str, caller, msg);
-        } else {
-            msg_len = snprintf(NULL, 0, "[%s] [LOG] %s: %s\n", time_str, caller, msg);
-            log_line = malloc(msg_len + 1);
-            snprintf(log_line, msg_len + 1, "[%s] [LOG] %s: %s\n", time_str, caller, msg);
-        }
-        free(log_line);
+        sem_wait(&log_file_lock);
+        log_file = fopen(LOG_FILE, "a");
+
+        if (is_error)
+            fprintf(log_file, "[%s] [ERR] %s: %s\n", time_str, caller, msg);
+        else
+            fprintf(log_file, "[%s] [LOG] %s: %s\n", time_str, caller, msg);
+
+        fclose(log_file);
+        sem_post(&log_file_lock);
     }
 }
 
@@ -557,8 +559,9 @@ void *master_thread() {
 int main(int argc, char *argv[]) {
     pthread_t master;
 
-    // Initialize lock on open_files
+    // Initialize lock on open_files and log file
     sem_init(&open_files_lock, 0, 1);
+    sem_init(&log_file_lock, 0, 1);
 
     // Seed RNG
     srand(time(0));
