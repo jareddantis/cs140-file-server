@@ -297,6 +297,7 @@ void *master_thread() {
     // Loop forever
     while (1) {
         // Read user input
+        printf("> ");
         scanf("%s", cmdline);
 
         // Create log line with timestamp
