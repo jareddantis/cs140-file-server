@@ -9,7 +9,7 @@
 /**
  * Set to 1 to print log to console, or to 0 to print to a log file.
  */
-#define LOG_TO_CONSOLE  0
+#define LOG_TO_CONSOLE  1
 
 /**
  * ANSI color codes for colored output.
@@ -211,12 +211,14 @@ void close_file(char *file_path) {
  * @brief Write text to a file located at *file_path.
  *        If the file already exists, append text to it.
  *        If the file does not exist, create it and write text to it.
+ *        If for_user is non-zero, we sleep for 25ms * number of characters in text.
  * 
  * @param file_path Path to the file, consisting of at most 50 characters.
  * @param text Text to write to the file.
+ * @param for_user Set to a non-zero value if we are writing to a user-specified file.
  * @return 0 on success, -1 on failure.
  */
-int write_file(char *file_path, char *text, int trailing_newline) {
+int write_file(char *file_path, char *text, int for_user) {
     FILE *file;
     char *log_line;
     int wait_us = 25000;
@@ -237,14 +239,13 @@ int write_file(char *file_path, char *text, int trailing_newline) {
     }
 
     // Write the text to the file
-    if (trailing_newline)
-        fprintf(file, "%s\n", text);
-    else
-        fprintf(file, "%s", text);
+    fprintf(file, "%s\n", text);
 
     // Project requirement: Wait 25ms per character written
-    wait_us *= strlen(text);
-    usleep(wait_us);
+    if (for_user) {
+        wait_us *= strlen(text);
+        usleep(wait_us);
+    }
 
     // Close the file
     fclose(file);
@@ -508,7 +509,7 @@ void *master_thread() {
         timestamp = get_time();
         log_line = malloc(strlen(timestamp) + strlen(cmdline) + 2);
         sprintf(log_line, "[%s] %s", timestamp, cmdline);
-        write_file(COMMANDS_FILE, log_line, 1);
+        write_file(COMMANDS_FILE, log_line, 0);
         free(log_line);
 
         // Create a new thread to handle the request
