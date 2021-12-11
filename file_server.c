@@ -461,7 +461,8 @@ void *worker_thread(void *arg) {
 
     // Optionally, the command line may contain free text as the third argument.
     // Check if this argument is present using strlen and extract it.
-    if (strlen(parcel->cmdline) > strlen(cmd) + strlen(file_path)) {
+    preceding_len = strlen(cmd) + strlen(file_path) + 2;
+    if (strlen(parcel->cmdline) > preceding_len) {
         // Make sure we're writing to a file.
         if (request_type != REQUEST_WRITE) {
             print_log("worker", "Free text argument only valid for write requests.", 1);
@@ -471,7 +472,6 @@ void *worker_thread(void *arg) {
         }
 
         // How long is the free text?
-        preceding_len = strlen(cmd) + strlen(file_path) + 2;
         text_len = strlen(parcel->cmdline) - preceding_len;
         if (text_len > 50) {
             print_log("worker", "Free text argument is longer than 50 characters.", 1);
