@@ -562,7 +562,7 @@ void *master_thread() {
         cmdline[strcspn(cmdline, "\n")] = '\0';
         log_line = malloc(128);
         sprintf(log_line, "Received command: %s", cmdline);
-        print_log("read_file", log_line, 0);
+        print_log("master", log_line, 0);
         free(log_line);
 
         // Create log line with timestamp
