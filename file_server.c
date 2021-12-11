@@ -7,9 +7,10 @@
 #include <unistd.h>
 
 /**
- * Set to 1 to print log to console, or to 0 to print to a log file.
+ * Debug flags
  */
-#define LOG_TO_CONSOLE  0
+#define LOG_TO_CONSOLE  1          // Set to 1 to print logs to console, or to 0 to print to a log file.
+#define JOIN_THREADS    1          // Set to 1 to join threads, or to 0 to detach them.
 
 /**
  * ANSI color codes for colored output.
@@ -579,8 +580,12 @@ void *master_thread() {
         print_log("master", "Spawning new thread to handle request.", 0);
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
             print_log("master", "Could not create worker thread.", 1);
-        else
-            pthread_detach(thread);
+        else {
+            if (JOIN_THREADS)
+                pthread_join(thread, NULL);
+            else
+                pthread_detach(thread);
+        }
     }
 }
 
