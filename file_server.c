@@ -28,6 +28,18 @@
 #define READ_BUF_SIZE   1024
 
 /**
+ * We can't return values from threads, but we *can* pass a pointer to
+ * a preallocated return value variable to them. Thus we make use of a
+ * struct for packaging thread arguments and return values into a neat
+ * little package.
+ */
+typedef struct thread_parcel ThreadParcel;
+struct thread_parcel {
+    char *cmdline;
+    int return_value;
+};
+
+/**
  * To avoid race conditions with file accesses,
  * we keep track of open files in a linked list of path-semaphore objects.
  */
@@ -343,22 +355,26 @@ int empty_file(char *file_path, char *cmdline) {
  *****************************/
 
 /**
- * @fn int *worker_thread(char *cmdline)
+ * @fn void *worker_thread(void *arg)
  * @brief Worker thread that handles a single user request.
  *        This thread will receive a request from the master thread,
  *        parse the request, and handle the request accordingly.
  * 
  * @return 0 on success, -1 on failure.
  */
-int *worker_thread(char *cmdline) {
-    char *cmd, *file_path, text[51];
+void *worker_thread(void *arg) {
+    ThreadParcel *parcel = (ThreadParcel *)arg;
+    char *cmdline, *cmd, *file_path, text[51];
     int request_type, text_len;
+
+    // Get cmdline from parcel
+    cmdline = parcel->cmdline;
 
     // Check what type of request the client sent.
     request_type = determine_request(cmdline);
     if (request_type == REQUEST_INVALID) {
         print_err("worker", "Invalid command.");
-        return -1;
+        parcel->return_value = -1;
     }
 
     // All valid command lines contain the file path as the second argument.
@@ -367,7 +383,7 @@ int *worker_thread(char *cmdline) {
     file_path = strtok(cmdline, " ");
     if (file_path == NULL) {
         print_err("worker", "Missing file path");
-        return -1;
+        parcel->return_value = -1;
     }
 
     // Optionally, the command line may contain free text as the third argument.
@@ -376,14 +392,14 @@ int *worker_thread(char *cmdline) {
         // Make sure we're writing to a file.
         if (request_type != REQUEST_WRITE) {
             print_err("worker", "Free text argument only valid for write requests.");
-            return -1;
+            parcel->return_value = -1;
         }
 
         // How long is the free text?
         text_len = strlen(cmdline) - (strlen(cmd) + strlen(file_path));
         if (text_len > 50) {
             print_err("worker", "Free text argument is longer than 50 characters");
-            return -1;
+            parcel->return_value = -1;
         }
 
         // Extract the free text using strncpy.
@@ -395,13 +411,13 @@ int *worker_thread(char *cmdline) {
     // we can now handle the request.
     switch (request_type) {
         case REQUEST_READ:
-            return read_file(file_path, READ_FILE, cmdline);
+            parcel->return_value = read_file(file_path, READ_FILE, cmdline);
         case REQUEST_WRITE:
-            return write_file(file_path, text);
+            parcel->return_value = write_file(file_path, text);
         case REQUEST_EMPTY:
-            return empty_file(file_path, cmdline);
+            parcel->return_value = empty_file(file_path, cmdline);
         default:
-            return -1;
+            parcel->return_value = -1;
     }
 }
 
@@ -419,6 +435,7 @@ void *master_thread() {
     // therefore including whitespace each command line is at most 107 characters.
     // This leaves us with a total of 108, including the NULL terminator.
     char *timestamp, *log_line, cmdline[108];
+    ThreadParcel *parcel;
     pthread_t thread;
 
     // Loop forever
@@ -439,12 +456,17 @@ void *master_thread() {
         free(log_line);
 
         // Create a new thread to handle the request
-        if (pthread_create(&thread, NULL, worker_thread, cmdline) != 0) {
-            print_err("master", "Error in worker thread.");
-        }
+        parcel = malloc(sizeof(ThreadParcel));
+        parcel->cmdline = cmdline;
+        parcel->return_value = 0;
+        if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
+            print_err("master", "Could not create worker thread.");
 
         // Wait for the thread to finish
         pthread_join(thread, NULL);
+        if (parcel->return_value != 0)
+            print_err("master", "Worker thread returned an error.");
+        free(parcel);
     }
 }
 
