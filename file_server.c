@@ -543,6 +543,8 @@ void *master_thread() {
         print_log("master", "Spawning new thread to handle request.", 0);
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
             print_log("master", "Could not create worker thread.", 1);
+        else
+            pthread_detach(thread);
     }
 }
 
