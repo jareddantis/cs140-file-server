@@ -197,8 +197,9 @@ void print_log(char *caller, char *msg, int is_error) {
  * @fn void open_file(char *file_path)
  * @brief Marks a file path as currently open, and waits for a lock on it.
  * @param file_path The path of the file to open.
+ * @return The semaphore of the file that was just opened.
  */
-void open_file(char *file_path) {
+sem_t *open_file(char *file_path) {
     OpenFileNode *node;
     OpenFile *file;
 
@@ -211,8 +212,9 @@ void open_file(char *file_path) {
             
             // Reset deallocation timer
             node->ticks_before_dealloc = WAIT_DEALLOC;
-            return;
+            return &node->file->lock;
         }
+        node = node->next;
     }
 
     // File is not open, so create a new node and add it to the start of the list
@@ -226,36 +228,24 @@ void open_file(char *file_path) {
     node->ticks_before_dealloc = WAIT_DEALLOC;
     open_files = node;
     sem_post(&open_files_lock);
+    return &file->lock;
 }
 
 /**
  * @fn void close_file(char *file_path)
  * @brief Marks a file path as no longer open, and releases the lock on it.
+ * @param lock The semaphore of the file to close.
  * @param file_path The path of the file to close.
  */
-void close_file(char *file_path) {
+void close_file(sem_t *lock, char *file_path) {
     OpenFileNode *node;
     char *log_line;
     
-    node = open_files;
-    while (node != NULL) {
-        if (strcmp(node->file->file_path, file_path) == 0) {
-            // Release the lock
-            sem_post(&node->file->lock);
-            return;
-        }
-        node = node->next;
-    }
+    // Unlock semaphore
+    sem_post(lock);
 
     // Tick all deallocation timers
     deallocate_old_files(file_path);
-
-    // File not found. Print error.
-    // 50 chars for the file path, 30 chars for the format string.
-    log_line = malloc(81);
-    sprintf(log_line, "Cannot close unopened file \"%s\".", file_path);
-    print_log("close_file", log_line, 1);
-    free(log_line);
 }
 
 /**
@@ -274,9 +264,10 @@ int write_file(char *file_path, char *text, int for_user) {
     FILE *file;
     char *log_line;
     int wait_us = 25000;
+    sem_t *lock;
 
     // Lock the file path, or wait if it's locked by another thread
-    open_file(file_path);
+    lock = open_file(file_path);
 
     // Open the file
     file = fopen(file_path, "a");
@@ -301,7 +292,7 @@ int write_file(char *file_path, char *text, int for_user) {
 
     // Close the file
     fclose(file);
-    close_file(file_path);
+    close_file(lock, file_path);
     return 0;
 }
 
@@ -324,9 +315,10 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     FILE *src, *dest;
     char *log_line, buf[READ_BUF_SIZE];
     size_t read_size;
+    sem_t *src_lock, *dest_lock;
 
     // Open destination first
-    open_file(dest_path);
+    dest_lock = open_file(dest_path);
     dest = fopen(dest_path, "a");
     if (dest == NULL) {
         // Could not open file. Print error.
@@ -346,7 +338,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     }
 
     // Open source
-    open_file(src_path);
+    src_lock = open_file(src_path);
     src = fopen(src_path, "r");
     if (src != NULL) {
         // Append the command line to dest
@@ -360,6 +352,8 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         // Close source and dest
         fclose(src);
         fclose(dest);
+        close_file(src_lock, src_path);
+        close_file(dest_lock, dest_path);
     } else {
         // Could not open file. Print error.
         // 50 chars for the file path, 32 chars for the format string.
@@ -387,35 +381,27 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
  * @return 0 on success, -1 on failure.
  */
 int empty_file(char *file_path, char *cmdline) {
-    FILE *empty, *file;
+    FILE *file;
     char *log_line;
+    sem_t *file_lock;
 	int ret, wait_s = 7 + (rand() % 4);      // Returns a pseudo-random integer between 7 and 10, inclusive
-
-    // Open EMPTY_FILE
-    open_file(EMPTY_FILE);
-    empty = fopen(EMPTY_FILE, "a");
-    if (empty == NULL) {
-        // Could not open file. Print error.
-        // 50 chars for the file path, 34 chars for the format string.
-        log_line = malloc(85);
-        sprintf(log_line, "Cannot open file \"%s\" for appending.", EMPTY_FILE);
-        print_log("read_file", log_line, 1);
-        free(log_line);
-        return -1;
-    }
 
     // Check if file exists
     if (access(file_path, F_OK) != 0) {
         // File does not exist. Print FILE DNE to EMPTY_FILE.
-        if (cmdline != NULL)
-            fprintf(empty, "%s: FILE ALREADY EMPTY\n", cmdline);
+        if (cmdline != NULL) {
+            log_line = malloc(strlen(cmdline) + 23);
+            sprintf(log_line, "%s: FILE ALREADY EMPTY\n", cmdline);
+            write_file(EMPTY_FILE, log_line, 0);
+            free(log_line);
+        }
     } else {
-        // File exists. Append the command line to EMPTY_FILE.
+        // File exists. Append the command line and file contents to EMPTY_FILE.
         if (cmdline != NULL)
-            fprintf(empty, "%s: ", cmdline);
+            read_file(file_path, EMPTY_FILE, cmdline);
 
-        // Open file
-        open_file(file_path);
+        // Open file to empty
+        file_lock = open_file(file_path);
         file = fopen(file_path, "w");
         if (file == NULL) {
             // Could not open file. Print error.
@@ -431,7 +417,7 @@ int empty_file(char *file_path, char *cmdline) {
         // the system empties the file for us if it already exists,
         // and thus all that is left to do is close it.
         fclose(file);
-        close_file(file_path);
+        close_file(file_lock, file_path);
     }
 
     return 0;
