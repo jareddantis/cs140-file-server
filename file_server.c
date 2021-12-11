@@ -380,6 +380,18 @@ int empty_file(char *file_path, char *cmdline) {
     return 0;
 }
 
+/**
+ * @fn void *thread_cleanup(ThreadParcel *parcel)
+ * @brief Clean up the thread, printing errors if any.
+ * @param parcel ThreadParcel of the thread to clean up.
+ */
+void *thread_cleanup(ThreadParcel *parcel) {
+    if (parcel->return_value != 0)
+        print_log("cleanup", "Worker thread returned an error.", 1);
+    free(parcel);
+    return NULL;
+}
+
 /*****************************
  *       Thread def'ns       *
  *****************************/
@@ -405,6 +417,7 @@ void *worker_thread(void *arg) {
     if (request_type == REQUEST_INVALID) {
         print_log("worker", "Invalid command.", 1);
         parcel->return_value = -1;
+        thread_cleanup(parcel);
         return NULL;
     }
 
@@ -415,6 +428,7 @@ void *worker_thread(void *arg) {
     if (file_path == NULL) {
         print_log("worker", "Missing file path.", 1);
         parcel->return_value = -1;
+        thread_cleanup(parcel);
         return NULL;
     }
 
@@ -425,6 +439,7 @@ void *worker_thread(void *arg) {
         if (request_type != REQUEST_WRITE) {
             print_log("worker", "Free text argument only valid for write requests.", 1);
             parcel->return_value = -1;
+            thread_cleanup(parcel);
             return NULL;
         }
 
@@ -433,6 +448,7 @@ void *worker_thread(void *arg) {
         if (text_len > 50) {
             print_log("worker", "Free text argument is longer than 50 characters.", 1);
             parcel->return_value = -1;
+            thread_cleanup(parcel);
             return NULL;
         }
 
@@ -453,6 +469,8 @@ void *worker_thread(void *arg) {
         default:
             parcel->return_value = -1;
     }
+
+    thread_cleanup(parcel);
 }
 
 /**
@@ -500,12 +518,6 @@ void *master_thread() {
         print_log("master", "Spawning new thread to handle request.", 0);
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
             print_log("master", "Could not create worker thread.", 1);
-
-        // Wait for the thread to finish
-        pthread_join(thread, NULL);
-        if (parcel->return_value != 0)
-            print_log("master", "Worker thread returned an error.", 1);
-        free(parcel);
     }
 }
 
