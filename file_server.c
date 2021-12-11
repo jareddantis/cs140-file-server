@@ -277,7 +277,56 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
  * @param cmdline Command line used to call the function.
  * @return 0 on success, -1 on failure.
  */
-int empty_file(char *file_path, char *cmdline) {}
+int empty_file(char *file_path, char *cmdline) {
+    FILE *empty, *file;
+    char *log_line;
+	int ret, wait_s = 7 + (rand() % 4);      // Returns a pseudo-random integer between 7 and 10, inclusive
+
+    // Open EMPTY_FILE
+    open_file(EMPTY_FILE);
+    empty = fopen(EMPTY_FILE, "a");
+    if (empty == NULL) {
+        // Could not open file. Print error.
+        // 50 chars for the file path, 34 chars for the format string.
+        log_line = malloc(85);
+        sprintf(log_line, "Cannot open file \"%s\" for appending.", EMPTY_FILE);
+        print_err("read_file", log_line);
+        free(log_line);
+        return -1;
+    }
+
+    // Check if file exists
+    if (access(file_path, F_OK) != 0) {
+        // File does not exist. Print FILE DNE to EMPTY_FILE.
+        if (cmdline != NULL)
+            fprintf(empty, "%s: FILE ALREADY EMPTY\n", cmdline);
+    } else {
+        // File exists. Append the command line to EMPTY_FILE.
+        if (cmdline != NULL)
+            fprintf(empty, "%s: ", cmdline);
+
+        // Open file
+        open_file(file_path);
+        file = fopen(file_path, "w");
+        if (file == NULL) {
+            // Could not open file. Print error.
+            // 50 chars for the file path, 33 chars for the format string.
+            log_line = malloc(84);
+            sprintf(log_line, "Cannot open file \"%s\" for emptying.", file_path);
+            print_err("read_file", log_line);
+            free(log_line);
+            return -1;
+        }
+
+        // Since we opened the file with the "w" flag,
+        // the system empties the file for us if it already exists,
+        // and thus all that is left to do is close it.
+        fclose(file);
+        close_file(file_path);
+    }
+
+    return 0;
+}
 
 /**
  * @fn int *worker_thread(char *cmdline)
