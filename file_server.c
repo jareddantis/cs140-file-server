@@ -464,7 +464,10 @@ void *master_thread() {
         // Remove newline from input
         // https://stackoverflow.com/a/28462221/3350320
         cmdline[strcspn(cmdline, "\n")] = '\0';
-        print_log("master", cmdline);
+        log_line = malloc(128);
+        sprintf(log_line, "Received command: %s", cmdline);
+        print_log("read_file", log_line);
+        free(log_line);
 
         // Create log line with timestamp
         timestamp = get_time();
