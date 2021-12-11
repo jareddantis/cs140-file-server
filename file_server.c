@@ -433,7 +433,7 @@ void *thread_cleanup(ThreadParcel *parcel) {
 void *worker_thread(void *arg) {
     ThreadParcel *parcel = (ThreadParcel *)arg;
     char *cmdline, *cmd, *file_path, text[51];
-    int request_type, text_len;
+    int request_type, preceding_len, text_len;
 
     // Get cmdline from parcel
     cmdline = malloc(strlen(parcel->cmdline) + 1);
@@ -461,7 +461,7 @@ void *worker_thread(void *arg) {
 
     // Optionally, the command line may contain free text as the third argument.
     // Check if this argument is present using strlen and extract it.
-    if (strlen(cmdline) > strlen(cmd) + strlen(file_path)) {
+    if (strlen(parcel->cmdline) > strlen(cmd) + strlen(file_path)) {
         // Make sure we're writing to a file.
         if (request_type != REQUEST_WRITE) {
             print_log("worker", "Free text argument only valid for write requests.", 1);
@@ -471,7 +471,8 @@ void *worker_thread(void *arg) {
         }
 
         // How long is the free text?
-        text_len = strlen(cmdline) - (strlen(cmd) + strlen(file_path));
+        preceding_len = strlen(cmd) + strlen(file_path) + 2;
+        text_len = strlen(parcel->cmdline) - preceding_len;
         if (text_len > 50) {
             print_log("worker", "Free text argument is longer than 50 characters.", 1);
             parcel->return_value = -1;
@@ -480,7 +481,7 @@ void *worker_thread(void *arg) {
         }
 
         // Extract the free text using strncpy.
-        strncpy(text, cmdline + strlen(cmd) + strlen(file_path), text_len);
+        strncpy(text, parcel->cmdline + preceding_len, text_len);
         text[text_len] = '\0';
     }
 
