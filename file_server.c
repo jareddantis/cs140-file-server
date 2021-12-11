@@ -179,6 +179,7 @@ void close_file(char *file_path) {
         if (strcmp(node->file->file_path, file_path) == 0) {
             // Release the lock
             sem_post(&node->file->lock);
+            return;
         }
         node = node->next;
     }
