@@ -7,11 +7,15 @@
 #include <unistd.h>
 
 /**
+ * Set to 1 to print log to console, or to 0 to print to a log file.
+ */
+#define LOG_TO_CONSOLE  0
+
+/**
  * ANSI color codes for colored output.
- * See print_log() and print_err().
+ * See print_log() and print_log().
  * Adapted from https://stackoverflow.com/a/3219471/3350320.
  */
-
 #define ANSI_RED        "\x1b[31m"
 #define ANSI_GREEN      "\x1b[32m"
 #define ANSI_YELLOW     "\x1b[33m"
@@ -24,6 +28,7 @@
 #define READ_FILE       "read.txt"
 #define EMPTY_FILE      "empty.txt"
 #define COMMANDS_FILE   "commands.txt"
+#define LOG_FILE        "log.txt"
 
 /**
  * Constants to denote request types, for convenience.
@@ -111,22 +116,29 @@ char *get_time() {
  * 
  * @param caller The name of the function or thread that is printing the message.
  * @param msg The message to print.
+ * @param is_error Set to a non-zero value if the message is an error message.
  */
-void print_log(char *caller, char *msg) {
-    char *time_str = get_time();
-    printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
-}
+void print_log(char *caller, char *msg, int is_error) {
+    char *log_line, *time_str = get_time();
+    ssize_t msg_len;
 
-/**
- * @fn void print_err(char *msg)
- * @brief Print a timestamped error message to stderr.'
- * 
- * @param caller The name of the function or thread that is printing the message.
- * @param msg The error message to print.
- */
-void print_err(char *caller, char *msg) {
-    char *time_str = get_time();
-    fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
+    if (LOG_TO_CONSOLE) {
+        if (is_error)
+            fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_GREEN "[ERR] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
+        else
+            printf(ANSI_YELLOW "[%s] " ANSI_RED "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
+    } else {
+        if (is_error) {
+            msg_len = snprintf(NULL, 0, "[%s] [ERR] %s: %s\n", time_str, caller, msg);
+            log_line = malloc(msg_len + 1);
+            snprintf(log_line, msg_len + 1, "[%s] [ERR] %s: %s\n", time_str, caller, msg);
+        } else {
+            msg_len = snprintf(NULL, 0, "[%s] [LOG] %s: %s\n", time_str, caller, msg);
+            log_line = malloc(msg_len + 1);
+            snprintf(log_line, msg_len + 1, "[%s] [LOG] %s: %s\n", time_str, caller, msg);
+        }
+        free(log_line);
+    }
 }
 
 /*****************************
@@ -188,7 +200,7 @@ void close_file(char *file_path) {
     // 50 chars for the file path, 30 chars for the format string.
     log_line = malloc(81);
     sprintf(log_line, "Cannot close unopened file \"%s\".", file_path);
-    print_err("close_file", log_line);
+    print_log("close_file", log_line, 1);
     free(log_line);
 }
 
@@ -217,7 +229,7 @@ int write_file(char *file_path, char *text, int trailing_newline) {
         // 50 chars for the file path, 32 chars for the format string.
         log_line = malloc(83);
         sprintf(log_line, "Cannot open file \"%s\" for writing.", file_path);
-        print_err("write_file", log_line);
+        print_log("write_file", log_line, 1);
         free(log_line);
         return -1;
     }
@@ -266,7 +278,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         // 50 chars for the file path, 34 chars for the format string.
         log_line = malloc(85);
         sprintf(log_line, "Cannot open file \"%s\" for appending.", dest_path);
-        print_err("read_file", log_line);
+        print_log("read_file", log_line, 1);
         free(log_line);
         return -1;
     }
@@ -294,7 +306,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         // 50 chars for the file path, 32 chars for the format string.
         log_line = malloc(83);
         sprintf(log_line, "Cannot open file \"%s\" for reading.", src_path);
-        print_err("read_file", log_line);
+        print_log("read_file", log_line, 1);
         free(log_line);
         return -1;
     }
@@ -328,7 +340,7 @@ int empty_file(char *file_path, char *cmdline) {
         // 50 chars for the file path, 34 chars for the format string.
         log_line = malloc(85);
         sprintf(log_line, "Cannot open file \"%s\" for appending.", EMPTY_FILE);
-        print_err("read_file", log_line);
+        print_log("read_file", log_line, 1);
         free(log_line);
         return -1;
     }
@@ -351,7 +363,7 @@ int empty_file(char *file_path, char *cmdline) {
             // 50 chars for the file path, 33 chars for the format string.
             log_line = malloc(84);
             sprintf(log_line, "Cannot open file \"%s\" for emptying.", file_path);
-            print_err("read_file", log_line);
+            print_log("read_file", log_line, 1);
             free(log_line);
             return -1;
         }
@@ -389,7 +401,7 @@ void *worker_thread(void *arg) {
     // Check what type of request the client sent.
     request_type = determine_request(cmdline);
     if (request_type == REQUEST_INVALID) {
-        print_err("worker", "Invalid command.");
+        print_log("worker", "Invalid command.", 1);
         parcel->return_value = -1;
         return NULL;
     }
@@ -399,7 +411,7 @@ void *worker_thread(void *arg) {
     cmd = strtok(cmdline, " ");
     file_path = strtok(NULL, " ");
     if (file_path == NULL) {
-        print_err("worker", "Missing file path.");
+        print_log("worker", "Missing file path.", 1);
         parcel->return_value = -1;
         return NULL;
     }
@@ -409,7 +421,7 @@ void *worker_thread(void *arg) {
     if (strlen(cmdline) > strlen(cmd) + strlen(file_path)) {
         // Make sure we're writing to a file.
         if (request_type != REQUEST_WRITE) {
-            print_err("worker", "Free text argument only valid for write requests.");
+            print_log("worker", "Free text argument only valid for write requests.", 1);
             parcel->return_value = -1;
             return NULL;
         }
@@ -417,7 +429,7 @@ void *worker_thread(void *arg) {
         // How long is the free text?
         text_len = strlen(cmdline) - (strlen(cmd) + strlen(file_path));
         if (text_len > 50) {
-            print_err("worker", "Free text argument is longer than 50 characters.");
+            print_log("worker", "Free text argument is longer than 50 characters.", 1);
             parcel->return_value = -1;
             return NULL;
         }
@@ -469,7 +481,7 @@ void *master_thread() {
         cmdline[strcspn(cmdline, "\n")] = '\0';
         log_line = malloc(128);
         sprintf(log_line, "Received command: %s", cmdline);
-        print_log("read_file", log_line);
+        print_log("read_file", log_line, 0);
         free(log_line);
 
         // Create log line with timestamp
@@ -483,14 +495,14 @@ void *master_thread() {
         parcel = malloc(sizeof(ThreadParcel));
         parcel->cmdline = cmdline;
         parcel->return_value = 0;
-        print_log("master", "Spawning new thread to handle request.");
+        print_log("master", "Spawning new thread to handle request.", 0);
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
-            print_err("master", "Could not create worker thread.");
+            print_log("master", "Could not create worker thread.", 1);
 
         // Wait for the thread to finish
         pthread_join(thread, NULL);
         if (parcel->return_value != 0)
-            print_err("master", "Worker thread returned an error.");
+            print_log("master", "Worker thread returned an error.", 1);
         free(parcel);
     }
 }
@@ -511,13 +523,13 @@ int main(int argc, char *argv[]) {
 	srand(time(0));
 
     // Create master thread
-    print_log("main", "Starting file server...");
+    print_log("main", "Starting file server...", 0);
     pthread_create(&master, NULL, master_thread, NULL);
 
     // Wait for thread to finish
     pthread_join(master, NULL);
 
     // Exit
-    print_log("main", "Exiting file server...");
+    print_log("main", "Exiting file server...", 0);
     return 0;
 }
