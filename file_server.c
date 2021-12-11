@@ -82,6 +82,7 @@ void close_file(char *file_path) {
     log_line = malloc(81);
     sprintf(log_line, "Cannot close unopened file \"%s\".", file_path);
     print_err("close_file", log_line);
+    free(log_line);
 }
 
 /**
@@ -269,6 +270,7 @@ void *master_thread() {
         // and that this thread only dies when the whole server dies,
         // we do not have to worry about locking it.
         write_file("commands.txt", log_line);
+        free(log_line);
 
         // Create a new thread to handle the request
         if (pthread_create(&thread, NULL, worker_thread, cmdline) != 0) {
