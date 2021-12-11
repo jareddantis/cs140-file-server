@@ -31,16 +31,18 @@
  * To avoid race conditions with file accesses,
  * we keep track of open files in a linked list of path-semaphore objects.
  */
-OpenFileNode *open_files = NULL;
-sem_t open_files_lock;
-typedef struct OpenFile {
+typedef struct open_file_obj OpenFile;
+typedef struct open_file_node OpenFileNode;
+struct open_file_obj {
     char *file_path;
     sem_t lock;
-} OpenFile;
-typedef struct OpenFileNode {
+};
+struct open_file_node {
     OpenFile *file;
     OpenFileNode *next;
-} OpenFileNode;
+};
+sem_t open_files_lock;
+OpenFileNode *open_files = NULL;
 
 /**
  * @fn void open_file(char *file_path)
