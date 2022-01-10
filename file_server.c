@@ -10,7 +10,6 @@
  * Debug flags
  */
 #define LOG_TO_CONSOLE  1          // Set to 1 to print logs to console, or to 0 to print to a log file.
-#define JOIN_THREADS    1          // Set to 1 to join threads, or to 0 to detach them.
 
 /**
  * ANSI color codes for colored output.
@@ -529,7 +528,7 @@ void *worker_thread(void *arg) {
  *        appending each command to a file named <COMMANDS_FILE> along with
  *        the timestamp of the command.
  */
-void *master_thread() {
+void *master_thread(void* arg) {
     // The longest command name is 5 characters,
     // and the file path and text are both at most 50 characters,
     // therefore including whitespace each command line is at most 107 characters.
@@ -567,7 +566,7 @@ void *master_thread() {
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
             print_log("master", "Could not create worker thread.", 1);
         else {
-            if (JOIN_THREADS)
+            if (*(int*)arg == 1)
                 pthread_join(thread, NULL);
             else
                 pthread_detach(thread);
@@ -583,6 +582,20 @@ void *master_thread() {
  */
 int main(int argc, char *argv[]) {
     pthread_t master;
+    int join_threads = 0;
+
+    // Check if the user wants to join threads
+    if (argc > 1) {
+        if (strcmp(argv[1], "-j") == 0) {
+            join_threads = 1;
+            print_log("main", "Thread joining enabled.", 0);
+        } else {
+            printf("Usage: %s [-j]\n", argv[0]);
+            printf("\t-j\tJoin worker threads with the master thread after they have finished.\n");
+            printf("\t\tBy default, threads are detached, so the server can keep accepting input\n\t\twhile the worker threads are running.\n");
+            return 1;
+        }
+    }
 
     // Initialize lock on open_files and log file
     sem_init(&open_files_lock, 0, 1);
@@ -593,7 +606,7 @@ int main(int argc, char *argv[]) {
 
     // Create master thread
     print_log("main", "Starting file server...", 0);
-    pthread_create(&master, NULL, master_thread, NULL);
+    pthread_create(&master, NULL, master_thread, (void*)&join_threads);
 
     // Wait for thread to finish
     pthread_join(master, NULL);
