@@ -28,7 +28,6 @@
 #define READ_FILE       "read.txt"
 #define EMPTY_FILE      "empty.txt"
 #define COMMANDS_FILE   "commands.txt"
-#define LOG_FILE        "log.txt"
 
 /**
  * Constants to denote request types, for convenience.
@@ -54,29 +53,27 @@ typedef struct thread_parcel ThreadParcel;
 struct thread_parcel {
     char *cmdline;
     int return_value;
+    pthread_mutex_t lock;
+    ThreadParcel *next;
 };
 
 /**
  * To avoid race conditions with file accesses,
  * we keep track of open files in a linked list of path-semaphore objects.
  */
-#define WAIT_DEALLOC   3
-typedef struct open_file_obj OpenFile;
-typedef struct open_file_node OpenFileNode;
-struct open_file_obj {
-    char *file_path;
-    sem_t lock;
+typedef struct file_t_struct file_t;
+struct file_t_struct {
+    char *path;
+    ThreadParcel *threads;
+    file_t *next;
+};
+typedef struct {
     pthread_cond_t queue;
-    int is_available;
-};
-struct open_file_node {
-    OpenFile *file;
-    OpenFileNode *next;
-    int ticks_before_dealloc;     // When this reaches 0, the node is deallocated.
-};
-sem_t open_files_lock;
-sem_t log_file_lock;
-OpenFileNode *open_files = NULL;
+    pthread_mutex_t lock;
+    unsigned int curr, waiting;
+} queue_lock;
+file_t *open_files = NULL;
+queue_lock *open_files_lock = NULL;
 
 /*****************************
  *      Helper functions     *
@@ -137,60 +134,134 @@ void print_log(char *caller, char *msg, int is_error) {
     }
 }
 
+/**
+ * @fn void ticket_enqueue(queue_lock *lock)
+ * @brief Place the calling function into a FIFO queue of waiting threads,
+ *        managed by the given queue_lock (condition variable and mutex).
+ *        Adapted from https://stackoverflow.com/a/3050871/3350320
+ * @param lock The queue_lock to use.
+ */
+void ticket_enqueue(queue_lock *lock) {
+    unsigned int ticket;
+
+    pthread_mutex_lock(&lock->lock);
+    ticket = lock->waiting++;
+    while (ticket != lock->curr)
+        pthread_cond_wait(&lock->queue, &lock->lock);
+    pthread_mutex_unlock(&lock->lock);
+}
+
+/**
+ * @fn void ticket_dequeue(queue_lock *lock)
+ * @brief Increments the current ticket in the queue lock and wakes up the thread
+ *        holding the new ticket value.
+ *        Adapted from https://stackoverflow.com/a/3050871/3350320
+ */
+void ticket_dequeue(queue_lock *lock) {
+    pthread_mutex_lock(&lock->lock);
+    lock->curr++;
+    pthread_cond_broadcast(&lock->queue);
+    pthread_mutex_unlock(&lock->lock);
+}
+
 /*****************************
  *      Command handlers     *
  *****************************/
 
 /**
- * @fn void open_file(char *file_path)
+ * @fn void enqueue(char *file_path, ThreadParcel *parcel)
  * @brief Marks a file path as currently open, and waits for a lock on it.
  * @param file_path The path of the file to open.
- * @return The semaphore of the file that was just opened.
+ * @param parcel The parcel of the thread that is requesting the file.
  */
-sem_t *open_file(char *file_path) {
-    OpenFileNode *node;
-    OpenFile *file;
+void *enqueue(char *file_path, ThreadParcel *parcel) {
+    file_t *file = open_files;
+    ThreadParcel *last;
+    unsigned long ticket;
+
+    // Get ticket for modifying open_files
+    ticket_enqueue(open_files_lock);
+    
+    // Lock the parcel mutex first so the thread doesn't continue
+    // until the file is free
+    pthread_mutex_lock(&parcel->lock);
 
     // Check if the file is already open
-    node = open_files;
-    while (node != NULL) {
-        if (strcmp(node->file->file_path, file_path) == 0) {
-            // File is already open, so just wait for the lock
-            sem_wait(&node->file->lock);
-            
-            // Reset deallocation timer
-            node->ticks_before_dealloc = WAIT_DEALLOC;
-            return &node->file->lock;
+    while (file != NULL) {
+        if (strcmp(file->path, file_path) == 0) {
+            // File has already been opened, is the queue empty?
+            if (file->threads == NULL) {
+                // Queue is empty, add this thread to the queue
+                file->threads = parcel;
+
+                // Since this is the only thread in the queue,
+                // we can go ahead and signal it.
+                pthread_mutex_unlock(&parcel->lock);
+            } else {
+                // Queue is not empty, so we set the next pointer
+                // of the last thread in the queue to this thread
+                last = file->threads;
+                while (last->next != NULL)
+                    last = last->next;
+                last->next = parcel;
+            }
+            goto unlock;
         }
-        node = node->next;
+        file = file->next;
     }
 
-    // File is not open, so create a new node and add it to the start of the list
-    sem_wait(&open_files_lock);
-    file = malloc(sizeof(OpenFile));
-    file->file_path = file_path;
-    sem_init(&file->lock, 0, 1);
-    node = malloc(sizeof(OpenFileNode));
-    node->file = file;
-    node->next = open_files;
-    node->ticks_before_dealloc = WAIT_DEALLOC;
-    open_files = node;
-    sem_post(&open_files_lock);
-    return &file->lock;
+    // No files are currently open, so we can initialize the list
+    file = malloc(sizeof(file_t));
+    file->path = file_path;
+    file->threads = parcel;
+    file->next = NULL;
+    open_files = file;
+    pthread_mutex_unlock(&parcel->lock);
+
+unlock:
+    ticket_dequeue(open_files_lock);
 }
 
 /**
- * @fn void close_file(char *file_path)
+ * @fn void dequeue(char *file_path)
  * @brief Marks a file path as no longer open, and releases the lock on it.
- * @param lock The semaphore of the file to close.
  * @param file_path The path of the file to close.
  */
-void close_file(sem_t *lock, char *file_path) {
-    OpenFileNode *node;
-    char *log_line;
-    
-    // Unlock semaphore
-    sem_post(lock);
+void dequeue(char *file_path) {
+    file_t *prev, *curr, *file = open_files;
+    ThreadParcel *next;
+
+    // Check if the file is open
+    ticket_enqueue(open_files_lock);
+    while (file != NULL) {
+        if (strcmp(file->path, file_path) == 0) {
+            // File is open, is the queue empty?
+            if (file->threads != NULL && file->threads->next != NULL) {
+                // Queue is not empty, so we remove the first thread
+                // from the queue and signal the next thread in the queue
+                next = file->threads->next;
+                pthread_mutex_unlock(&next->lock);
+                file->threads = next;
+            } else {
+                // Queue is empty, so we remove the file from the list
+                prev = open_files;
+                curr = open_files->next;
+
+                while (curr != NULL) {
+                    if (strcmp(curr->path, file_path) == 0) {
+                        prev->next = curr->next;
+                        free(curr);
+                        break;
+                    }
+                    prev = curr;
+                    curr = curr->next;
+                }
+            }
+            break;
+        }
+        file = file->next;
+    }
+    ticket_dequeue(open_files_lock);
 }
 
 /**
@@ -209,10 +280,6 @@ int write_file(char *file_path, char *text, int for_user) {
     FILE *file;
     char *log_line;
     int wait_us = 25000;
-    sem_t *lock;
-
-    // Lock the file path, or wait if it's locked by another thread
-    lock = open_file(file_path);
 
     // Open the file
     file = fopen(file_path, "a");
@@ -237,7 +304,6 @@ int write_file(char *file_path, char *text, int for_user) {
 
     // Close the file
     fclose(file);
-    close_file(lock, file_path);
     return 0;
 }
 
@@ -260,10 +326,21 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     FILE *src, *dest;
     char *log_line, buf[READ_BUF_SIZE];
     size_t read_size;
-    sem_t *src_lock, *dest_lock;
+    ThreadParcel *dummy;
+    int return_value = 0;
 
-    // Open destination first
-    dest_lock = open_file(dest_path);
+    // We already hold a lock on the source file, so we need to acquire
+    // a lock on the destination file.
+    // To do this, we enqueue a dummy parcel for the destination file
+    // and wait for its corresponding lock.
+    dummy = malloc(sizeof(ThreadParcel));
+    dummy->cmdline = NULL;
+    dummy->return_value = 0;
+    pthread_mutex_init(&dummy->lock, NULL);
+    enqueue(READ_FILE, dummy);
+    pthread_mutex_lock(&dummy->lock);
+
+    // Open destination now that we hold a lock on it.
     dest = fopen(dest_path, "a");
     if (dest == NULL) {
         // Could not open file. Print error.
@@ -272,7 +349,8 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         sprintf(log_line, "Cannot open file \"%s\" for appending.", dest_path);
         print_log("read_file", log_line, 1);
         free(log_line);
-        return -1;
+        return_value = -1;
+        goto cleanup;
     }
 
     // Check if file exists
@@ -282,8 +360,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
             fprintf(dest, "%s: FILE DNE\n", cmdline);
     }
 
-    // Open source
-    src_lock = open_file(src_path);
+    // Open source.
     src = fopen(src_path, "r");
     if (src != NULL) {
         // Append the command line to dest
@@ -297,8 +374,6 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         // Close source and dest
         fclose(src);
         fclose(dest);
-        close_file(src_lock, src_path);
-        close_file(dest_lock, dest_path);
     } else {
         // Could not open file. Print error.
         // 50 chars for the file path, 32 chars for the format string.
@@ -306,10 +381,17 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         sprintf(log_line, "Cannot open file \"%s\" for reading.", src_path);
         print_log("read_file", log_line, 1);
         free(log_line);
-        return -1;
+        return_value = -1;
     }
 
-    return 0;
+cleanup:
+    // Dequeue this thread from the destination file's queue
+    // and destroy the lock, along with the dummy parcel.
+    dequeue(READ_FILE);
+    pthread_mutex_unlock(&dummy->lock);
+    pthread_mutex_destroy(&dummy->lock);
+
+    return return_value;
 }
 
 /**
@@ -328,7 +410,6 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
 int empty_file(char *file_path, char *cmdline) {
     FILE *file;
     char *log_line;
-    sem_t *file_lock;
 	int ret, wait_s = 7 + (rand() % 4);      // Returns a pseudo-random integer between 7 and 10, inclusive
 
     // Check if file exists
@@ -346,7 +427,6 @@ int empty_file(char *file_path, char *cmdline) {
             read_file(file_path, EMPTY_FILE, cmdline);
 
         // Open file to empty
-        file_lock = open_file(file_path);
         file = fopen(file_path, "w");
         if (file == NULL) {
             // Could not open file. Print error.
@@ -362,7 +442,6 @@ int empty_file(char *file_path, char *cmdline) {
         // the system empties the file for us if it already exists,
         // and thus all that is left to do is close it.
         fclose(file);
-        close_file(file_lock, file_path);
     }
 
     return 0;
@@ -376,6 +455,10 @@ int empty_file(char *file_path, char *cmdline) {
 void *thread_cleanup(ThreadParcel *parcel) {
     if (parcel->return_value != 0)
         print_log("cleanup", "Worker thread returned an error.", 1);
+    
+    // Destroy lock and free parcel
+    pthread_mutex_unlock(&parcel->lock);
+    pthread_mutex_destroy(&parcel->lock);
     free(parcel);
     return NULL;
 }
@@ -393,7 +476,7 @@ void *thread_cleanup(ThreadParcel *parcel) {
  * @return 0 on success, -1 on failure.
  */
 void *worker_thread(void *arg) {
-    ThreadParcel *parcel = (ThreadParcel *)arg;
+    ThreadParcel *dummy, *parcel = (ThreadParcel *)arg;
     char *cmdline, *cmd, *file_path, text[51];
     int request_type, preceding_len, text_len;
 
@@ -447,8 +530,12 @@ void *worker_thread(void *arg) {
         text[text_len] = '\0';
     }
 
-    // Now that we have the file path and the free text,
-    // we can now handle the request.
+    // Initialize mutex and add this thread to the file queue.
+    pthread_mutex_init(&parcel->lock, NULL);
+    enqueue(file_path, parcel);
+
+    // Handle the request once the lock is free.
+    pthread_mutex_lock(&parcel->lock);
     switch (request_type) {
         case REQUEST_READ:
             parcel->return_value = read_file(file_path, READ_FILE, parcel->cmdline);
@@ -463,6 +550,8 @@ void *worker_thread(void *arg) {
             parcel->return_value = -1;
     }
 
+    // Dequeue the file and destroy the lock.
+    dequeue(file_path);
     thread_cleanup(parcel);
 }
 
@@ -543,8 +632,12 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Initialize lock on open_files
-    sem_init(&open_files_lock, 0, 1);
+    // Initialize ticketing lock on open_files
+    open_files_lock = malloc(sizeof(queue_lock));
+    pthread_mutex_init(&open_files_lock->lock, NULL);
+    pthread_cond_init(&open_files_lock->queue, NULL);
+    open_files_lock->curr = 0;
+    open_files_lock->waiting = 0;
 
     // Seed RNG
     srand(time(0));
@@ -555,6 +648,11 @@ int main(int argc, char *argv[]) {
 
     // Wait for thread to finish
     pthread_join(master, NULL);
+
+    // Destroy ticketing lock on open_files
+    pthread_mutex_destroy(&open_files_lock->lock);
+    pthread_cond_destroy(&open_files_lock->queue);
+    free(open_files_lock);
 
     // Exit
     print_log("main", "Exiting file server...", 0);
