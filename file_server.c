@@ -31,7 +31,7 @@
 
 /**
  * Constants to denote request types, for convenience.
- * See determine_request().
+ * See worker_thread().
  */
 #define REQUEST_INVALID 0
 #define REQUEST_READ    1
@@ -86,16 +86,13 @@ queue_lock *open_files_lock = NULL;
  * @param cmdline The command line from the client.
  * @return The type of request.
  */
-int determine_request(char *cmdline) {
+int determine_request(char *cmd) {
     // Check if the command line is empty.
-    if (strlen(cmdline) == 0)
-        return REQUEST_INVALID;
-
-    if (strncmp(cmdline, "read", 4) == 0)
+    if (strcmp(cmd, "read") == 0)
         return REQUEST_READ;
-    else if (strncmp(cmdline, "write", 5) == 0)
+    else if (strcmp(cmd, "write") == 0)
         return REQUEST_WRITE;
-    else if (strncmp(cmdline, "empty", 5) == 0)
+    else if (strcmp(cmd, "empty") == 0)
         return REQUEST_EMPTY;
 
     return REQUEST_INVALID;
@@ -484,21 +481,22 @@ void *worker_thread(void *arg) {
     cmdline = malloc(strlen(parcel->cmdline) + 1);
     strcpy(cmdline, parcel->cmdline);
 
-    // Check what type of request the client sent.
-    request_type = determine_request(cmdline);
-    if (request_type == REQUEST_INVALID) {
-        print_log("worker", "Invalid command.", 1);
+    // All valid command lines contain the command name as the first arg
+    // and a file path as the second argument.
+    // Extract them from the command line.
+    cmd = strtok(cmdline, " ");
+    file_path = strtok(NULL, " ");
+    if (file_path == NULL) {
+        print_log("worker", "Missing file path.", 1);
         parcel->return_value = -1;
         thread_cleanup(parcel);
         return NULL;
     }
 
-    // All valid command lines contain the file path as the second argument.
-    // Extract this from the command line.
-    cmd = strtok(cmdline, " ");
-    file_path = strtok(NULL, " ");
-    if (file_path == NULL) {
-        print_log("worker", "Missing file path.", 1);
+    // Check what type of request the client sent.
+    request_type = determine_request(cmd);
+    if (request_type == REQUEST_INVALID) {
+        print_log("worker", "Invalid command.", 1);
         parcel->return_value = -1;
         thread_cleanup(parcel);
         return NULL;
