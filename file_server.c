@@ -125,7 +125,6 @@ char *get_time() {
  */
 void print_log(char *caller, char *msg, int is_error) {
     char *log_line, *time_str = get_time();
-    FILE *log_file;
     ssize_t msg_len;
     
     // Always print errors to console
@@ -135,17 +134,6 @@ void print_log(char *caller, char *msg, int is_error) {
     if (LOG_TO_CONSOLE) {
         if (is_error == 0)
             printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
-    } else {
-        sem_wait(&log_file_lock);
-        log_file = fopen(LOG_FILE, "a");
-
-        if (is_error)
-            fprintf(log_file, "[%s] [ERR] %s: %s\n", time_str, caller, msg);
-        else
-            fprintf(log_file, "[%s] [LOG] %s: %s\n", time_str, caller, msg);
-
-        fclose(log_file);
-        sem_post(&log_file_lock);
     }
 }
 
@@ -555,9 +543,8 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    // Initialize lock on open_files and log file
+    // Initialize lock on open_files
     sem_init(&open_files_lock, 0, 1);
-    sem_init(&log_file_lock, 0, 1);
 
     // Seed RNG
     srand(time(0));
