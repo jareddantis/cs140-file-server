@@ -419,6 +419,10 @@ int empty_file(char *file_path, char *cmdline) {
             free(log_line);
         }
     } else {
+        // Project requirement: wait for a random amount of time
+        // between 7 to 10 sec, inclusive
+        sleep(wait_s);
+
         // File exists. Append the command line and file contents to EMPTY_FILE.
         if (cmdline != NULL)
             read_file(file_path, EMPTY_FILE, cmdline);
