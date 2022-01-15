@@ -66,6 +66,8 @@ typedef struct open_file_node OpenFileNode;
 struct open_file_obj {
     char *file_path;
     sem_t lock;
+    pthread_cond_t queue;
+    int is_available;
 };
 struct open_file_node {
     OpenFile *file;
@@ -100,47 +102,6 @@ int determine_request(char *cmdline) {
         return REQUEST_EMPTY;
 
     return REQUEST_INVALID;
-}
-
-/**
- * @fn void deallocate_old_files(char *just_closed)
- * @brief Deallocates old files from the open file list.
- *        "Old" files are those that have been open for more than
- *        WAIT_DEALLOC ticks, where each tick is marked by a call to close_file().
- * 
- * @param just_closed The path of the file that was just closed, which we exclude from ticking.
- */
-void deallocate_old_files(char *just_closed) {
-    OpenFileNode *curr = open_files;
-    OpenFileNode *prev = NULL;
-    int is_first = 1;
-
-    sem_wait(&open_files_lock);
-    while (curr != NULL) {
-        // Skip the file that was just closed
-        if (strcmp(curr->file->file_path, just_closed) == 0) {
-            prev = curr;
-            curr = curr->next;
-            continue;
-        }
-
-        // Tick the node's dealloc timer. If it reaches 0, deallocate it.
-        curr->ticks_before_dealloc--;
-        if (curr->ticks_before_dealloc == 0) {
-            prev = curr;
-            curr = curr->next;
-            free(prev->file);
-            free(prev);
-
-            if (is_first)
-                open_files = curr;
-        } else {
-            // Move to the next node
-            curr = curr->next;
-            is_first = 0;
-        }
-    }
-    sem_post(&open_files_lock);
 }
 
 /**
@@ -242,9 +203,6 @@ void close_file(sem_t *lock, char *file_path) {
     
     // Unlock semaphore
     sem_post(lock);
-
-    // Tick all deallocation timers
-    deallocate_old_files(file_path);
 }
 
 /**
