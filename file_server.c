@@ -198,6 +198,7 @@ void *enqueue(char *file_path, ThreadParcel *parcel) {
     unsigned long ticket;
 
     // Get ticket for modifying open_files
+    print_log(0, "enqueue", "Received request to lock file %s", file_path);
     ticket_enqueue(open_files_lock);
     
     // Lock the parcel mutex first so the thread doesn't continue
@@ -208,8 +209,10 @@ void *enqueue(char *file_path, ThreadParcel *parcel) {
     while (file != NULL) {
         if (strcmp(file->path, file_path) == 0) {
             // File has already been opened, is the queue empty?
+            print_log(0, "enqueue", "File %s has been opened before, checking queue.", file_path);
             if (file->threads == NULL) {
                 // Queue is empty, add this thread to the queue
+                print_log(0, "enqueue", "Queue is empty, enqueueing and starting thread immediately.");
                 file->threads = parcel;
 
                 // Since this is the only thread in the queue,
@@ -218,6 +221,7 @@ void *enqueue(char *file_path, ThreadParcel *parcel) {
             } else {
                 // Queue is not empty, so we set the next pointer
                 // of the last thread in the queue to this thread
+                print_log(0, "enqueue", "Queue is not empty, enqueueing and waiting for next thread.");
                 last = file->threads;
                 while (last->next != NULL)
                     last = last->next;
@@ -229,6 +233,7 @@ void *enqueue(char *file_path, ThreadParcel *parcel) {
     }
 
     // No files are currently open, so we can initialize the list
+    print_log(0, "enqueue", "No files are currently open, initializing new file list.");
     file = malloc(sizeof(file_t));
     file->path = file_path;
     file->threads = parcel;
@@ -251,17 +256,21 @@ void dequeue(char *file_path) {
 
     // Check if the file is open
     ticket_enqueue(open_files_lock);
+    print_log(0, "dequeue", "Received request to unlock file %s", file_path);
     while (file != NULL) {
         if (strcmp(file->path, file_path) == 0) {
             // File is open, is the queue empty?
+            print_log(0, "dequeue", "File %s is open, checking queue.", file_path);
             if (file->threads != NULL && file->threads->next != NULL) {
                 // Queue is not empty, so we remove the first thread
                 // from the queue and signal the next thread in the queue
+                print_log(0, "dequeue", "Queue is not empty, dequeueing and signaling next thread.");
                 next = file->threads->next;
                 pthread_mutex_unlock(&next->lock);
                 file->threads = next;
             } else {
                 // Queue is empty, so we remove the file from the list
+                print_log(0, "dequeue", "Queue is empty, dequeueing and freeing file node.");
                 prev = open_files;
                 curr = open_files->next;
 
@@ -312,7 +321,10 @@ int write_file(char *file_path, char *text, int for_user) {
     // Project requirement: Wait 25ms per character written
     if (for_user) {
         wait_us *= strlen(text);
+        print_log(0, "write_file", "%d characters written to \"%s\". Sleeping for %d ms...", strlen(text), file_path, wait_us / 1000);
         usleep(wait_us);
+    } else {
+        print_log(0, "write_file", "File \"%s\" written.", file_path);
     }
 
     // Close the file
@@ -352,12 +364,14 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     // a lock on the destination file.
     // To do this, we enqueue a dummy parcel for the destination file
     // and wait for its corresponding lock.
+    print_log(0, "read_file", "Attempting to acquire lock on destination file \"%s\".", dest_path);
     dummy = malloc(sizeof(ThreadParcel));
     dummy->cmdline = NULL;
     dummy->return_value = 0;
     pthread_mutex_init(&dummy->lock, NULL);
     enqueue(dest_path, dummy);
     pthread_mutex_lock(&dummy->lock);
+    print_log(0, "read_file", "Acquired lock on destination file \"%s\".", dest_path);
 
     // Open destination now that we hold a lock on it.
     dest = fopen(dest_path, "a");
@@ -390,6 +404,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         // Close source and dest
         fclose(src);
         fclose(dest);
+        print_log(0, "read_file", "Successfully read file \"%s\" into \"%s\".", src_path, dest_path);
     } else {
         // Could not open file. Print error.
         print_log(1, "read_file", "Cannot open file \"%s\" for reading.", src_path);
@@ -442,14 +457,15 @@ int empty_file(char *file_path, char *cmdline) {
             return -1;
         }
 
-        // Project requirement: wait for a random amount of time
-        // between 7 to 10 sec, inclusive
-        sleep(wait_s);
-
         // Since we opened the file with the "w" flag,
         // the system empties the file for us if it already exists,
         // and thus all that is left to do is close it.
         fclose(file);
+
+        // Project requirement: wait for a random amount of time
+        // between 7 to 10 sec, inclusive
+        print_log(0, "empty_file", "%s emptied. Sleeping for %d seconds...", file_path, wait_s);
+        sleep(wait_s);
     }
 
     return 0;
@@ -540,11 +556,13 @@ void *worker_thread(void *arg) {
     }
 
     // Initialize mutex and add this thread to the file queue.
+    print_log(0, "worker", "Attempting to acquire lock for file \"%s\".", file_path);
     pthread_mutex_init(&parcel->lock, NULL);
     enqueue(file_path, parcel);
 
     // Handle the request once the lock is free.
     pthread_mutex_lock(&parcel->lock);
+    print_log(0, "worker", "Acquired lock for file \"%s\", now performing operation \"%s\".", file_path, cmd);
     switch (request_type) {
         case REQUEST_READ:
             parcel->return_value = read_file(file_path, READ_FILE, parcel->cmdline);
@@ -565,6 +583,7 @@ void *worker_thread(void *arg) {
     }
 
     // Dequeue the file and destroy the lock.
+    print_log(0, "worker", "Releasing lock for file \"%s\"", file_path);
     dequeue(file_path);
     thread_cleanup(parcel);
 }
@@ -632,13 +651,11 @@ int main(int argc, char *argv[]) {
 
     // Check if the user wants to join threads
     for (arg = 1; arg < argc; arg++) {
-        if (strcmp(argv[arg], "-j") == 0 && join_threads == 0) {
+        if (strcmp(argv[arg], "-j") == 0 && join_threads == 0)
             join_threads = 1;
-            print_log(0, "main", "Thread joining enabled.");
-        } else if (strcmp(argv[arg], "-v") == 0 && log_to_console == 0) {
+        else if (strcmp(argv[arg], "-v") == 0 && log_to_console == 0)
             log_to_console = 1;
-            print_log(0, "main", "Verbose mode enabled.");
-        } else {
+        else {
             printf("Usage: %s [-j] [-v]\n", argv[0]);
             printf("\t-j\tJoin worker threads with the master thread after they have finished.\n");
             printf("\t\tBy default, threads are detached, so the server can keep accepting input\n");
@@ -647,6 +664,8 @@ int main(int argc, char *argv[]) {
             return 1;
         }
     }
+    if (join_threads) print_log(0, "main", "Thread joining enabled.");
+    if (log_to_console) print_log(0, "main", "Verbose mode enabled.");
 
     // Initialize ticketing lock on open_files
     open_files_lock = malloc(sizeof(queue_lock));
