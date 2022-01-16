@@ -157,6 +157,9 @@ void print_log(int is_error, char *caller, char *msg, ...) {
         vprintf(msg, args);
         printf("\n");
     }
+
+    // Disable access to variadic arguments
+    va_end(args);
 }
 
 /**
