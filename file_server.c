@@ -208,10 +208,6 @@ void ticket_unlock(queue_lock *lock) {
     pthread_mutex_unlock(&lock->lock);
 }
 
-/*****************************
- *      Command handlers     *
- *****************************/
-
 /**
  * @fn void enqueue(char *file_path)
  * @brief Marks a file path as currently open, and waits for a lock on it.
@@ -272,6 +268,10 @@ void dequeue(char *file_path) {
     }
     ticket_unlock(open_files_lock);
 }
+
+/*****************************
+ *      Command handlers     *
+ *****************************/
 
 /**
  * @fn int write_file(char *file_path, char *text, int for_user)
