@@ -308,7 +308,7 @@ int write_file(char *file_path, char *text, int for_user) {
 }
 
 /**
- * @fn int read_file(char *file_path, char *cmdline)
+ * @fn int read_file(char *src_path, char *dest_path, char *cmdline, int before_empty)
  * @brief Append text from a file located at *file_path to <READ_FILE>.
  *        If the file exists, append the following to <READ_FILE>:
  *            <cmdline>: <contents>\n
@@ -319,10 +319,11 @@ int write_file(char *file_path, char *text, int for_user) {
  * 
  * @param src_path Path to the source file, consisting of at most 50 characters.
  * @param dest_path Path to the destination file, consisting of at most 50 characters.
- * @param cmdline Command line used to call the function. NULL if called from empty_file().
+ * @param cmdline Command line used to call the function.
+ * @param before_empty Set to a non-zero value if being called right before empty_file().
  * @return 0 on success, -1 on failure.
  */
-int read_file(char *src_path, char *dest_path, char *cmdline) {
+int read_file(char *src_path, char *dest_path, char *cmdline, int before_empty) {
     FILE *src, *dest;
     char buf[READ_BUF_SIZE];
     size_t read_size;
@@ -354,12 +355,13 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     // Check if file exists
     if (access(src_path, F_OK) != 0) {
         // File does not exist. Print FILE DNE to READ_FILE.
-        if (cmdline != NULL)
+        if (before_empty == 0)
             fprintf(dest, "%s: FILE DNE\n", cmdline);
         else
             fprintf(dest, "%s: FILE ALREADY EMPTY\n", cmdline);
         print_log(1, "read_file", "File \"%s\" does not exist.", src_path);
         return_value = -1;
+        fclose(dest);
         goto cleanup;
     }
 
@@ -545,7 +547,7 @@ void *worker_thread(void *arg) {
     print_log(0, "worker", "Acquired lock for file \"%s\", now performing operation \"%s\".", file_path, cmd);
     switch (request_type) {
         case REQUEST_READ:
-            parcel->return_value = read_file(file_path, READ_FILE, parcel->cmdline);
+            parcel->return_value = read_file(file_path, READ_FILE, parcel->cmdline, 0);
             break;
         case REQUEST_WRITE:
             parcel->return_value = write_file(file_path, text, 1);
@@ -554,7 +556,7 @@ void *worker_thread(void *arg) {
             // To avoid deadlocks, we can first read the file contents
             // before emptying it, instead of having empty_file call
             // read_file from within the same thread.
-            parcel->return_value = read_file(file_path, EMPTY_FILE, NULL);
+            parcel->return_value = read_file(file_path, EMPTY_FILE, parcel->cmdline, 1);
             if (parcel->return_value == 0)
                 parcel->return_value = empty_file(file_path, parcel->cmdline);
             break;
