@@ -428,10 +428,6 @@ int empty_file(char *file_path, char *cmdline) {
             free(log_line);
         }
     } else {
-        // Project requirement: wait for a random amount of time
-        // between 7 to 10 sec, inclusive
-        sleep(wait_s);
-
         // File exists. Append the command line and file contents to EMPTY_FILE.
         if (cmdline != NULL)
             read_file(file_path, EMPTY_FILE, cmdline);
@@ -443,6 +439,10 @@ int empty_file(char *file_path, char *cmdline) {
             print_log(1, "empty_file", "Cannot open file \"%s\" for emptying.", file_path);
             return -1;
         }
+
+        // Project requirement: wait for a random amount of time
+        // between 7 to 10 sec, inclusive
+        sleep(wait_s);
 
         // Since we opened the file with the "w" flag,
         // the system empties the file for us if it already exists,
