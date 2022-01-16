@@ -229,7 +229,7 @@ void *enqueue(char *file_path) {
     }
 
     // No files are currently open, so we can initialize the list
-    print_log(0, "enqueue", "No files are currently open, creating new file node.");
+    print_log(0, "enqueue", "File %s has not been opened before, creating new file node.", file_path);
     file = malloc(sizeof(file_t));
     file->lock = malloc(sizeof(queue_lock));
     file->path = file_path;
