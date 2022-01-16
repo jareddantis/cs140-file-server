@@ -203,7 +203,7 @@ void ticket_lock(queue_lock *lock) {
 void ticket_unlock(queue_lock *lock) {
     pthread_mutex_lock(&lock->lock);
     lock->curr++;
-    print_log(0, "ticket_unlock", "Now serving next ticket: %d", pthread_self(), lock->curr);
+    print_log(0, "ticket_unlock", "Now serving next ticket: %d", lock->curr);
     pthread_cond_broadcast(&lock->queue);
     pthread_mutex_unlock(&lock->lock);
 }
