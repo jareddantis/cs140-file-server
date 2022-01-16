@@ -214,7 +214,7 @@ void ticket_unlock(queue_lock *lock) {
  * @param file_path The path of the file to open.
  */
 void enqueue(char *file_path) {
-    file_t *file = open_files;
+    file_t *file;
     unsigned long ticket;
 
     // Get ticket for modifying open_files
@@ -222,6 +222,7 @@ void enqueue(char *file_path) {
     ticket_lock(open_files_lock);
 
     // Check if the file is already open
+    file = open_files;
     while (file != NULL) {
         if (strcmp(file->path, file_path) == 0) {
             // File has already been opened, so wait for it to be closed
