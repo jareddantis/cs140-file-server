@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <semaphore.h>
@@ -112,22 +113,42 @@ char *get_time() {
 /**
  * @fn void print_log(char *msg)
  * @brief Print a timestamped message to stdout.
+ *        This is a variadic function, meant to be called with printf-style arguments.
+ *        A sample call would be
+ *            print_log(0, "main", "Hello, world! %d", 42);
+ *        which would print the following to stdout:
+ *            [2020-01-01 01:01:01] [LOG] main: Hello, world! 42
  * 
- * @param caller The name of the function or thread that is printing the message.
- * @param msg The message to print.
  * @param is_error Set to a non-zero value if the message is an error message.
+ * @param caller The name of the function or thread that is printing the message.
+ * @param msg The format string of the log message.
+ * @param ... The arguments to the format string.
  */
-void print_log(char *caller, char *msg, int is_error) {
-    char *log_line, *time_str = get_time();
+void print_log(int is_error, char *caller, char *msg, ...) {
+    char *time_str = get_time();
     ssize_t msg_len;
-    
-    // Always print errors to console
-    if (is_error)
-        fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
+    va_list args;
 
-    if (log_to_console == 1) {
-        if (is_error == 0)
-            printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
+    // Don't do anything if logging is not enabled
+    if (log_to_console == 0)
+        return;
+    
+    // Print the timestamp, log type, and caller name
+    if (is_error)
+        fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR] " ANSI_CYAN "%s: " ANSI_RESET, time_str, caller);
+    else
+        printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET, time_str, caller);
+    
+    // Enable access to variadic arguments
+    va_start(args, msg);
+
+    // Print the log message itself along with a newline
+    if (is_error) {
+        vfprintf(stderr, msg, args);
+        fprintf(stderr, "\n");
+    } else {
+        vprintf(msg, args);
+        printf("\n");
     }
 }
 
@@ -275,18 +296,13 @@ void dequeue(char *file_path) {
  */
 int write_file(char *file_path, char *text, int for_user) {
     FILE *file;
-    char *log_line;
     int wait_us = 25000;
 
     // Open the file
     file = fopen(file_path, "a");
     if (file == NULL) {
         // Could not open file. Print error.
-        // 50 chars for the file path, 32 chars for the format string.
-        log_line = malloc(83);
-        sprintf(log_line, "Cannot open file \"%s\" for writing.", file_path);
-        print_log("write_file", log_line, 1);
-        free(log_line);
+        print_log(1, "write_file", "Cannot open file \"%s\" for writing.", file_path);
         return -1;
     }
 
@@ -321,7 +337,7 @@ int write_file(char *file_path, char *text, int for_user) {
  */
 int read_file(char *src_path, char *dest_path, char *cmdline) {
     FILE *src, *dest;
-    char *log_line, buf[READ_BUF_SIZE];
+    char buf[READ_BUF_SIZE];
     size_t read_size;
     ThreadParcel *dummy;
     int return_value = 0;
@@ -341,11 +357,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     dest = fopen(dest_path, "a");
     if (dest == NULL) {
         // Could not open file. Print error.
-        // 50 chars for the file path, 34 chars for the format string.
-        log_line = malloc(85);
-        sprintf(log_line, "Cannot open file \"%s\" for appending.", dest_path);
-        print_log("read_file", log_line, 1);
-        free(log_line);
+        print_log(1, "read_file", "Cannot open file \"%s\" for appending.", dest_path);
         return_value = -1;
         goto cleanup;
     }
@@ -374,11 +386,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         fclose(dest);
     } else {
         // Could not open file. Print error.
-        // 50 chars for the file path, 32 chars for the format string.
-        log_line = malloc(83);
-        sprintf(log_line, "Cannot open file \"%s\" for reading.", src_path);
-        print_log("read_file", log_line, 1);
-        free(log_line);
+        print_log(1, "read_file", "Cannot open file \"%s\" for reading.", src_path);
         return_value = -1;
     }
 
@@ -432,11 +440,7 @@ int empty_file(char *file_path, char *cmdline) {
         file = fopen(file_path, "w");
         if (file == NULL) {
             // Could not open file. Print error.
-            // 50 chars for the file path, 33 chars for the format string.
-            log_line = malloc(84);
-            sprintf(log_line, "Cannot open file \"%s\" for emptying.", file_path);
-            print_log("empty_file", log_line, 1);
-            free(log_line);
+            print_log(1, "empty_file", "Cannot open file \"%s\" for emptying.", file_path);
             return -1;
         }
 
@@ -456,7 +460,7 @@ int empty_file(char *file_path, char *cmdline) {
  */
 void *thread_cleanup(ThreadParcel *parcel) {
     if (parcel->return_value != 0)
-        print_log("cleanup", "Worker thread returned an error.", 1);
+        print_log(1, "cleanup", "Worker thread returned an error.");
     
     // Destroy lock and free parcel
     pthread_mutex_unlock(&parcel->lock);
@@ -492,7 +496,7 @@ void *worker_thread(void *arg) {
     cmd = strtok(cmdline, " ");
     file_path = strtok(NULL, " ");
     if (file_path == NULL) {
-        print_log("worker", "Missing file path.", 1);
+        print_log(1, "worker", "Missing file path.");
         parcel->return_value = -1;
         thread_cleanup(parcel);
         return NULL;
@@ -501,7 +505,7 @@ void *worker_thread(void *arg) {
     // Check what type of request the client sent.
     request_type = determine_request(cmd);
     if (request_type == REQUEST_INVALID) {
-        print_log("worker", "Invalid command.", 1);
+        print_log(1, "worker", "Invalid command.");
         parcel->return_value = -1;
         thread_cleanup(parcel);
         return NULL;
@@ -513,7 +517,7 @@ void *worker_thread(void *arg) {
     if (strlen(parcel->cmdline) > preceding_len) {
         // Make sure we're writing to a file.
         if (request_type != REQUEST_WRITE) {
-            print_log("worker", "Free text argument only valid for write requests.", 1);
+            print_log(1, "worker", "Free text argument only valid for write requests.");
             parcel->return_value = -1;
             thread_cleanup(parcel);
             return NULL;
@@ -522,7 +526,7 @@ void *worker_thread(void *arg) {
         // How long is the free text?
         text_len = strlen(parcel->cmdline) - preceding_len;
         if (text_len > 50) {
-            print_log("worker", "Free text argument is longer than 50 characters.", 1);
+            print_log(1, "worker", "Free text argument is longer than 50 characters.");
             parcel->return_value = -1;
             thread_cleanup(parcel);
             return NULL;
@@ -584,14 +588,11 @@ void *master_thread(void* arg) {
         // Remove newline from input
         // https://stackoverflow.com/a/28462221/3350320
         cmdline[strcspn(cmdline, "\n")] = '\0';
-        log_line = malloc(128);
-        sprintf(log_line, "Received command: %s", cmdline);
-        print_log("master", log_line, 0);
-        free(log_line);
+        print_log(0, "master", "Received command: %s", cmdline);
 
         // Create log line with timestamp
         timestamp = get_time();
-        log_line = malloc(strlen(timestamp) + strlen(cmdline) + 2);
+        log_line = malloc(strlen(timestamp) + strlen(cmdline) + 4);
         sprintf(log_line, "[%s] %s", timestamp, cmdline);
         write_file(COMMANDS_FILE, log_line, 0);
         free(log_line);
@@ -600,9 +601,9 @@ void *master_thread(void* arg) {
         parcel = malloc(sizeof(ThreadParcel));
         parcel->cmdline = cmdline;
         parcel->return_value = 0;
-        print_log("master", "Spawning new thread to handle request.", 0);
+        print_log(0, "master", "Spawning new thread to handle request.");
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
-            print_log("master", "Could not create worker thread.", 1);
+            print_log(1, "master", "Could not create worker thread.");
         else {
             if (*(int*)arg == 1)
                 pthread_join(thread, NULL);
@@ -626,10 +627,10 @@ int main(int argc, char *argv[]) {
     for (arg = 1; arg < argc; arg++) {
         if (strcmp(argv[arg], "-j") == 0 && join_threads == 0) {
             join_threads = 1;
-            print_log("main", "Thread joining enabled.", 0);
+            print_log(0, "main", "Thread joining enabled.");
         } else if (strcmp(argv[arg], "-v") == 0 && log_to_console == 0) {
             log_to_console = 1;
-            print_log("main", "Verbose mode enabled.", 1);
+            print_log(0, "main", "Verbose mode enabled.");
         } else {
             printf("Usage: %s [-j] [-v]\n", argv[0]);
             printf("\t-j\tJoin worker threads with the master thread after they have finished.\n");
@@ -651,7 +652,7 @@ int main(int argc, char *argv[]) {
     srand(time(0));
 
     // Create master thread
-    print_log("main", "Starting file server...", 0);
+    print_log(0, "main", "Starting file server...");
     pthread_create(&master, NULL, master_thread, (void*)&join_threads);
 
     // Wait for thread to finish
@@ -663,6 +664,6 @@ int main(int argc, char *argv[]) {
     free(open_files_lock);
 
     // Exit
-    print_log("main", "Exiting file server...", 0);
+    print_log(0, "main", "Exiting file server...");
     return 0;
 }
