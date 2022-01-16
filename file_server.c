@@ -556,7 +556,7 @@ void *worker_thread(void *arg) {
             // To avoid deadlocks, we can first read the file contents
             // before emptying it, instead of having empty_file call
             // read_file from within the same thread.
-            parcel->return_value = read_file(file_path, EMPTY_FILE, parcel->cmdline);
+            parcel->return_value = read_file(file_path, EMPTY_FILE, NULL);
             if (parcel->return_value == 0)
                 parcel->return_value = empty_file(file_path, parcel->cmdline);
             break;
