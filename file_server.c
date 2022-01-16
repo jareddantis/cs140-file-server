@@ -342,6 +342,12 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     ThreadParcel *dummy;
     int return_value = 0;
 
+    // Check that we are not reading content into the same file
+    if (strcmp(src_path, dest_path) == 0) {
+        print_log(1, "read_file", "Cannot read file \"%s\" into itself.", src_path);
+        return -1;
+    }
+
     // We already hold a lock on the source file, so we need to acquire
     // a lock on the destination file.
     // To do this, we enqueue a dummy parcel for the destination file
