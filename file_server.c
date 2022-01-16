@@ -252,12 +252,15 @@ acquire:
  * @param file_path The path of the file to close.
  */
 void dequeue(char *file_path) {
-    file_t *prev, *curr, *file = open_files;
+    file_t *prev, *curr, *file;
     thread_parcel *next;
 
-    // Check if the file is open
-    ticket_lock(open_files_lock);
+    // Get ticket for modifying open_files
     print_log(0, "dequeue", "Received request to unlock file \"%s\"", file_path);
+    ticket_lock(open_files_lock);
+
+    // Check if the file is open
+    file = open_files;
     while (file != NULL) {
         if (strcmp(file->path, file_path) == 0) {
             // File is open, is the queue empty?
