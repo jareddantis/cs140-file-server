@@ -522,6 +522,11 @@ void *worker_thread(void *arg) {
         text[text_len] = '\0';
     }
 
+    // Initialize mutex and add this thread to the file queue.
+    print_log(0, "worker", "Attempting to acquire lock for file \"%s\".", file_path);
+    enqueue(file_path);
+    print_log(0, "worker", "Acquired lock for file \"%s\", now performing operation \"%s\".", file_path, cmd);
+
     // Project requirement: sleep for 1 second 80% of the time, and 6 seconds 20% of the time
     if (skip_sleep == 0) {
         if (wait_prob < 80)
@@ -532,12 +537,7 @@ void *worker_thread(void *arg) {
         sleep(wait_s);
     }
 
-    // Initialize mutex and add this thread to the file queue.
-    print_log(0, "worker", "Attempting to acquire lock for file \"%s\".", file_path);
-    enqueue(file_path);
-
     // Handle the request once the lock is free.
-    print_log(0, "worker", "Acquired lock for file \"%s\", now performing operation \"%s\".", file_path, cmd);
     switch (request_type) {
         case REQUEST_READ:
             parcel->return_value = read_file(file_path, READ_FILE, parcel->cmdline, 0);
