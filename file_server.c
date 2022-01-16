@@ -350,7 +350,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
     dummy->cmdline = NULL;
     dummy->return_value = 0;
     pthread_mutex_init(&dummy->lock, NULL);
-    enqueue(READ_FILE, dummy);
+    enqueue(dest_path, dummy);
     pthread_mutex_lock(&dummy->lock);
 
     // Open destination now that we hold a lock on it.
@@ -393,7 +393,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
 cleanup:
     // Dequeue this thread from the destination file's queue
     // and destroy the lock, along with the dummy parcel.
-    dequeue(READ_FILE);
+    dequeue(dest_path);
     pthread_mutex_unlock(&dummy->lock);
     pthread_mutex_destroy(&dummy->lock);
 
@@ -428,11 +428,7 @@ int empty_file(char *file_path, char *cmdline) {
             free(log_line);
         }
     } else {
-        // File exists. Append the command line and file contents to EMPTY_FILE.
-        if (cmdline != NULL)
-            read_file(file_path, EMPTY_FILE, cmdline);
-
-        // Open file to empty
+        // File exists. Open it to empty.
         file = fopen(file_path, "w");
         if (file == NULL) {
             // Could not open file. Print error.
@@ -551,7 +547,12 @@ void *worker_thread(void *arg) {
             parcel->return_value = write_file(file_path, text, 1);
             break;
         case REQUEST_EMPTY:
-            parcel->return_value = empty_file(file_path, parcel->cmdline);
+            // To avoid deadlocks, we can first read the file contents
+            // before emptying it, instead of having empty_file call
+            // read_file from within the same thread.
+            parcel->return_value = read_file(file_path, EMPTY_FILE, parcel->cmdline);
+            if (parcel->return_value == 0)
+                parcel->return_value = empty_file(file_path, parcel->cmdline);
             break;
         default:
             parcel->return_value = -1;
