@@ -7,9 +7,9 @@
 #include <unistd.h>
 
 /**
- * Debug flags
+ * Debug flags (see main())
  */
-#define LOG_TO_CONSOLE  1          // Set to 1 to print logs to console, or to 0 to print to a log file.
+int log_to_console = 0;
 
 /**
  * ANSI color codes for colored output.
@@ -125,7 +125,7 @@ void print_log(char *caller, char *msg, int is_error) {
     if (is_error)
         fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
 
-    if (LOG_TO_CONSOLE) {
+    if (log_to_console == 1) {
         if (is_error == 0)
             printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG] " ANSI_CYAN "%s: " ANSI_RESET "%s\n", time_str, caller, msg);
     }
@@ -619,17 +619,22 @@ void *master_thread(void* arg) {
  */
 int main(int argc, char *argv[]) {
     pthread_t master;
-    int join_threads = 0;
+    int arg, join_threads = 0;
 
     // Check if the user wants to join threads
-    if (argc > 1) {
-        if (strcmp(argv[1], "-j") == 0) {
+    for (arg = 1; arg < argc; arg++) {
+        if (strcmp(argv[arg], "-j") == 0 && join_threads == 0) {
             join_threads = 1;
             print_log("main", "Thread joining enabled.", 0);
+        } else if (strcmp(argv[arg], "-v") == 0 && log_to_console == 0) {
+            log_to_console = 1;
+            print_log("main", "Verbose mode enabled.", 1);
         } else {
-            printf("Usage: %s [-j]\n", argv[0]);
+            printf("Usage: %s [-j] [-v]\n", argv[0]);
             printf("\t-j\tJoin worker threads with the master thread after they have finished.\n");
-            printf("\t\tBy default, threads are detached, so the server can keep accepting input\n\t\twhile the worker threads are running.\n");
+            printf("\t\tBy default, threads are detached, so the server can keep accepting input\n");
+            printf("\t\twhile the worker threads are running.\n");
+            printf("\t-v\tVerbose mode: print logs to stdout. Off by default.\n");
             return 1;
         }
     }
