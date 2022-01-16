@@ -51,11 +51,10 @@ int skip_sleep = 0;
  * struct for bundling thread arguments and return values into a neat
  * little package.
  */
-typedef struct thread_parcel ThreadParcel;
-struct thread_parcel {
+typedef struct {
     char *cmdline;
     int return_value;
-};
+} thread_parcel;
 
 /**
  * Implementation of a FIFO locking system for the server.
@@ -124,7 +123,7 @@ char *get_time() {
  *        A sample call would be
  *            print_log(0, "main", "Hello, world! %d", 42);
  *        which would print the following to stdout:
- *            [2020-01-01 01:01:01] [LOG] main: Hello, world! 42
+ *            [Sun Jan 16 16:15:21 2022] [LOG] main: Hello, world! 42
  * 
  * @param is_error Set to a non-zero value if the message is an error message.
  * @param caller The name of the function or thread that is printing the message.
@@ -254,7 +253,7 @@ acquire:
  */
 void dequeue(char *file_path) {
     file_t *prev, *curr, *file = open_files;
-    ThreadParcel *next;
+    thread_parcel *next;
 
     // Check if the file is open
     ticket_enqueue(open_files_lock);
@@ -454,11 +453,11 @@ int empty_file(char *file_path, char *cmdline) {
 }
 
 /**
- * @fn void *thread_cleanup(ThreadParcel *parcel)
+ * @fn void *thread_cleanup(thread_parcel *parcel)
  * @brief Clean up the thread, printing errors if any.
- * @param parcel ThreadParcel of the thread to clean up.
+ * @param parcel thread_parcel of the thread to clean up.
  */
-void *thread_cleanup(ThreadParcel *parcel) {
+void *thread_cleanup(thread_parcel *parcel) {
     if (parcel->return_value != 0)
         print_log(1, "cleanup", "Worker thread returned an error.");
     free(parcel);
@@ -478,7 +477,7 @@ void *thread_cleanup(ThreadParcel *parcel) {
  * @return 0 on success, -1 on failure.
  */
 void *worker_thread(void *arg) {
-    ThreadParcel *dummy, *parcel = (ThreadParcel *)arg;
+    thread_parcel *dummy, *parcel = (thread_parcel *)arg;
     char *cmdline, *cmd, *file_path, text[51];
     int request_type, preceding_len, text_len;
     int wait_s, wait_prob = rand() % 100;
@@ -590,7 +589,7 @@ void *master_thread(void* arg) {
     // therefore including whitespace each command line is at most 107 characters.
     // This leaves us with a total of 109, including the newline and a NULL terminator.
     char *timestamp, *log_line, cmdline[109];
-    ThreadParcel *parcel;
+    thread_parcel *parcel;
     pthread_t thread;
 
     // Loop forever
@@ -614,7 +613,7 @@ void *master_thread(void* arg) {
         free(log_line);
 
         // Create a new thread to handle the request
-        parcel = malloc(sizeof(ThreadParcel));
+        parcel = malloc(sizeof(thread_parcel));
         parcel->cmdline = cmdline;
         parcel->return_value = 0;
         print_log(0, "master", "Spawning new thread to handle request.");
