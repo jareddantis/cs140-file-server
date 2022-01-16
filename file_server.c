@@ -358,6 +358,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
             fprintf(dest, "%s: FILE DNE\n", cmdline);
         else
             fprintf(dest, "%s: FILE ALREADY EMPTY\n", cmdline);
+        print_log(1, "read_file", "File \"%s\" does not exist.", src_path);
         return_value = -1;
         goto cleanup;
     }
@@ -558,6 +559,7 @@ void *worker_thread(void *arg) {
                 parcel->return_value = empty_file(file_path, parcel->cmdline);
             break;
         default:
+            print_log(1, "worker", "Invalid request type.");
             parcel->return_value = -1;
     }
 
