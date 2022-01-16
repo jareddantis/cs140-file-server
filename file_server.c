@@ -273,15 +273,24 @@ void dequeue(char *file_path) {
                 print_log(0, "dequeue", "Queue is empty, dequeueing and freeing file node.");
                 prev = open_files;
                 curr = open_files->next;
-
-                while (curr != NULL) {
-                    if (strcmp(curr->path, file_path) == 0) {
-                        prev->next = curr->next;
-                        free(curr);
-                        break;
+                
+                // Is this the only file in the list?
+                if (curr == NULL) {
+                    // Yes, so we can just free the file
+                    free(open_files);
+                    open_files = NULL;
+                } else {
+                    // No, so we need to find the file in the list
+                    while (curr != NULL) {
+                        if (strcmp(curr->path, file_path) == 0) {
+                            // Found the file, so we can free it
+                            prev->next = curr->next;
+                            free(curr);
+                            break;
+                        }
+                        prev = curr;
+                        curr = curr->next;
                     }
-                    prev = curr;
-                    curr = curr->next;
                 }
             }
             break;
