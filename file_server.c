@@ -457,11 +457,11 @@ int empty_file(char *file_path, char *cmdline) {
  * @brief Clean up the thread, printing errors if any.
  * @param parcel thread_parcel of the thread to clean up.
  */
-void *thread_cleanup(thread_parcel *parcel) {
+void thread_cleanup(thread_parcel *parcel) {
     if (parcel->return_value != 0)
         print_log(1, "cleanup", "Worker thread returned an error.");
     free(parcel);
-    return NULL;
+    print_log(0, "cleanup", "Worker thread %d cleaned up.", pthread_self());
 }
 
 /*****************************
