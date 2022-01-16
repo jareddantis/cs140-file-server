@@ -175,19 +175,20 @@ void ticket_init(queue_lock *lock) {
 }
 
 /**
- * @fn void ticket_lock(queue_lock *lock)
+ * @fn void ticket_lock(char *name, queue_lock *lock)
  * @brief Place the calling function into a FIFO queue of waiting threads,
  *        managed by the given queue_lock (condition variable and mutex).
  *        Adapted from https://stackoverflow.com/a/3050871/3350320.
+ * @param name The name of the object being locked (for logging only).
  * @param lock The queue_lock to use.
  */
-void ticket_lock(queue_lock *lock) {
+void ticket_lock(char *name, queue_lock *lock) {
     unsigned int ticket;
 
     pthread_mutex_lock(&lock->lock);
     ticket = lock->waiting++;
     while (ticket != lock->curr) {
-        print_log(0, "ticket_lock", "Now waiting for ticket %d (currently serving %d)", ticket, lock->curr);
+        print_log(0, "ticket_lock", "Now waiting for ticket %d to \"%s\" (currently %d)", ticket, name, lock->curr);
         pthread_cond_wait(&lock->queue, &lock->lock);
     }
     pthread_mutex_unlock(&lock->lock);
@@ -219,7 +220,7 @@ void enqueue(char *file_path) {
 
     // Get ticket for modifying open_files
     print_log(0, "enqueue", "Received request to lock file \"%s\"", file_path);
-    ticket_lock(open_files_lock);
+    ticket_lock("open_files", open_files_lock);
 
     // Check if the file is already open
     file = open_files;
@@ -242,7 +243,7 @@ void enqueue(char *file_path) {
     ticket_init(file->lock);
 
 acquire:
-    ticket_lock(file->lock);
+    ticket_lock(file_path, file->lock);
     ticket_unlock(open_files_lock);
 }
 
@@ -257,7 +258,7 @@ void dequeue(char *file_path) {
 
     // Get ticket for modifying open_files
     print_log(0, "dequeue", "Received request to unlock file \"%s\"", file_path);
-    ticket_lock(open_files_lock);
+    ticket_lock("open_files", open_files_lock);
 
     // Check if the file is open
     file = open_files;
