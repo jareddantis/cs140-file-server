@@ -609,7 +609,7 @@ void *master_thread(void *arg) {
         // Create log line with timestamp
         timestamp = get_time();
         log_line = malloc(strlen(timestamp) + strlen(cmdline) + 4);
-        sprintf(log_line, "[%s] %s", timestamp, cmdline);
+        sprintf(log_line, "[%s] %s\n", timestamp, cmdline);
         write_file(COMMANDS_FILE, log_line, 0);
         free(log_line);
 
