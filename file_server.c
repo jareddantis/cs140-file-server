@@ -493,7 +493,7 @@ void *worker_thread(void *arg) {
     cmd = strtok(cmdline, " ");
     file_path = strtok(NULL, " ");
     if (file_path == NULL) {
-        print_log(1, "worker", "Missing file path.");
+        print_log(1, "worker", "Missing argument.");
         parcel->return_value = -1;
         thread_cleanup(parcel);
         return NULL;
