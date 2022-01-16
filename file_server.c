@@ -353,7 +353,7 @@ int write_file(char *file_path, char *text, int for_user) {
  * 
  * @param src_path Path to the source file, consisting of at most 50 characters.
  * @param dest_path Path to the destination file, consisting of at most 50 characters.
- * @param cmdline Command line used to call the function. NULL if called from a thread.
+ * @param cmdline Command line used to call the function. NULL if called from empty_file().
  * @return 0 on success, -1 on failure.
  */
 int read_file(char *src_path, char *dest_path, char *cmdline) {
@@ -396,6 +396,10 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         // File does not exist. Print FILE DNE to READ_FILE.
         if (cmdline != NULL)
             fprintf(dest, "%s: FILE DNE\n", cmdline);
+        else
+            fprintf(dest, "%s: FILE ALREADY EMPTY\n", cmdline);
+        return_value = -1;
+        goto cleanup;
     }
 
     // Open source.
