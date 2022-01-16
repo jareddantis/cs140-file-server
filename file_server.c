@@ -597,6 +597,8 @@ void *master_thread(void* arg) {
         // Remove newline from input
         // https://stackoverflow.com/a/28462221/3350320
         cmdline[strcspn(cmdline, "\n")] = '\0';
+        if (strlen(cmdline) == 0)
+            continue;
         print_log(0, "master", "Received command: %s", cmdline);
 
         // Create log line with timestamp
