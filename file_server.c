@@ -11,6 +11,7 @@
  * Debug flags (see main())
  */
 int log_to_console = 0;
+int skip_sleep = 0;
 
 /**
  * ANSI color codes for colored output.
@@ -328,12 +329,12 @@ int write_file(char *file_path, char *text, int for_user) {
     fprintf(file, "%s\n", text);
 
     // Project requirement: Wait 25ms per character written
-    if (for_user) {
+    if (for_user && skip_sleep == 0) {
         wait_us *= strlen(text);
         print_log(0, "write_file", "%d characters written to \"%s\". Sleeping for %d ms...", strlen(text), file_path, wait_us / 1000);
         usleep(wait_us);
     } else {
-        print_log(0, "write_file", "File \"%s\" written.", file_path);
+        print_log(0, "write_file", "%d characters written to \"%s\".", strlen(text), file_path);
     }
 
     // Close the file
@@ -477,8 +478,8 @@ int empty_file(char *file_path, char *cmdline) {
 
         // Project requirement: wait for a random amount of time
         // between 7 to 10 sec, inclusive
-        print_log(0, "empty_file", "%s emptied. Sleeping for %d seconds...", file_path, wait_s);
-        sleep(wait_s);
+            print_log(0, "empty_file", "%s emptied. Sleeping for %d seconds...", file_path, wait_s);
+            sleep(wait_s);
     }
 
     return 0;
@@ -664,20 +665,24 @@ int main(int argc, char *argv[]) {
 
     // Check if the user wants to join threads
     for (arg = 1; arg < argc; arg++) {
-        if (strcmp(argv[arg], "-j") == 0 && join_threads == 0)
+        if (strcmp(argv[arg], "-i") == 0 && skip_sleep == 0)
+            skip_sleep = 1;
+        else if (strcmp(argv[arg], "-j") == 0 && join_threads == 0)
             join_threads = 1;
         else if (strcmp(argv[arg], "-v") == 0 && log_to_console == 0)
             log_to_console = 1;
         else {
-            printf("Usage: %s [-j] [-v]\n", argv[0]);
-            printf("\t-j\tJoin worker threads with the master thread after they have finished.\n");
+            printf("Usage: %s [-i] [-j] [-v]\n", argv[0]);
+            printf("\t-i\tInstant mode: Skip spec-mandated sleeps.\n");
+            printf("\t-j\tJoin mode: Join worker threads after they have finished, making the server blocking.\n");
             printf("\t\tBy default, threads are detached, so the server can keep accepting input\n");
             printf("\t\twhile the worker threads are running.\n");
             printf("\t-v\tVerbose mode: print logs to stdout. Off by default.\n");
             return 1;
         }
     }
-    if (join_threads) print_log(0, "main", "Thread joining enabled.");
+    if (skip_sleep) print_log(0, "main", "Instant mode enabled.");
+    if (join_threads) print_log(0, "main", "Join mode enabled.");
     if (log_to_console) print_log(0, "main", "Verbose mode enabled.");
 
     // Initialize ticketing lock on open_files
