@@ -658,7 +658,10 @@ int main(int argc, char *argv[]) {
     }
     if (skip_sleep) print_log(0, "main", "Instant mode enabled.");
     if (join_threads) print_log(0, "main", "Join mode enabled.");
-    if (log_to_console) print_log(0, "main", "Verbose mode enabled.");
+    if (log_to_console) {
+        print_log(0, "main", "Verbose mode enabled.");
+        setvbuf(stdout, NULL, _IONBF, 0);
+    }
 
     // Initialize ticketing lock on open_files
     open_files_lock = malloc(sizeof(queue_lock));
