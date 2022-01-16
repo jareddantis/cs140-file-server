@@ -418,15 +418,7 @@ int empty_file(char *file_path, char *cmdline) {
 	int ret, wait_s = 7 + (rand() % 4);      // Returns a pseudo-random integer between 7 and 10, inclusive
 
     // Check if file exists
-    if (access(file_path, F_OK) != 0) {
-        // File does not exist. Print FILE DNE to EMPTY_FILE.
-        if (cmdline != NULL) {
-            log_line = malloc(strlen(cmdline) + 23);
-            sprintf(log_line, "%s: FILE ALREADY EMPTY\n", cmdline);
-            write_file(EMPTY_FILE, log_line, 0);
-            free(log_line);
-        }
-    } else {
+    if (access(file_path, F_OK) == 0) {
         // File exists. Open it to empty.
         file = fopen(file_path, "w");
         if (file == NULL) {
