@@ -484,6 +484,7 @@ void *worker_thread(void *arg) {
     // Extract them from the command line.
     cmd = strtok(cmdline, " ");
     file_path = strtok(NULL, " ");
+    free(cmdline);
     if (file_path == NULL) {
         print_log(1, "worker", "Missing argument.");
         parcel->return_value = -1;
