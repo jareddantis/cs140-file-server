@@ -367,6 +367,7 @@ int read_file(char *src_path, char *dest_path, char *cmdline) {
         // Append source content to dest in chunks of READ_BUF_SIZE
         while ((read_size = fread(buf, 1, READ_BUF_SIZE, src)) > 0)
             fwrite(buf, 1, read_size, dest);
+        fprintf(dest, "\n");
 
         // Close source and dest
         fclose(src);
