@@ -480,7 +480,6 @@ void *worker_thread(void *arg) {
     // Extract them from the command line.
     cmd = strtok(cmdline, " ");
     file_path = strtok(NULL, " ");
-    free(cmdline);
     if (file_path == NULL) {
         print_log(1, "worker", "Missing argument.");
         parcel->return_value = -1;
@@ -562,6 +561,9 @@ void *worker_thread(void *arg) {
     // Dequeue the file and destroy the lock.
     print_log(0, "worker", "Releasing lock for file \"%s\"", file_path);
     dequeue(file_path);
+
+    // Deallocate the command line copy and the thread parcel.
+    free(cmdline);
     thread_cleanup(parcel);
 }
 
