@@ -218,21 +218,21 @@ void enqueue(char *file_path) {
     unsigned long ticket;
 
     // Get ticket for modifying open_files
-    print_log(0, "enqueue", "Received request to lock file %s", file_path);
+    print_log(0, "enqueue", "Received request to lock file \"%s\"", file_path);
     ticket_lock(open_files_lock);
 
     // Check if the file is already open
     while (file != NULL) {
         if (strcmp(file->path, file_path) == 0) {
             // File has already been opened, so wait for it to be closed
-            print_log(0, "enqueue", "File %s has been opened before, acquiring ticket.", file_path);
+            print_log(0, "enqueue", "File \"%s\" has been opened before, acquiring ticket.", file_path);
             goto acquire;
         }
         file = file->next;
     }
 
     // No files are currently open, so we can initialize the list
-    print_log(0, "enqueue", "File %s has not been opened before, creating new file node.", file_path);
+    print_log(0, "enqueue", "File \"%s\" has not been opened before, creating new file node.", file_path);
     file = malloc(sizeof(file_t));
     file->lock = malloc(sizeof(queue_lock));
     file->path = file_path;
@@ -256,11 +256,11 @@ void dequeue(char *file_path) {
 
     // Check if the file is open
     ticket_lock(open_files_lock);
-    print_log(0, "dequeue", "Received request to unlock file %s", file_path);
+    print_log(0, "dequeue", "Received request to unlock file \"%s\"", file_path);
     while (file != NULL) {
         if (strcmp(file->path, file_path) == 0) {
             // File is open, is the queue empty?
-            print_log(0, "dequeue", "File %s is open, serving next ticket.", file_path);
+            print_log(0, "dequeue", "File \"%s\" is open, serving next ticket.", file_path);
             ticket_unlock(file->lock);
             break;
         }
