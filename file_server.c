@@ -652,11 +652,12 @@ int main(int argc, char *argv[]) {
         else if (strcmp(argv[arg], "-v") == 0 && log_to_console == 0)
             log_to_console = 1;
         else {
+            fprintf(stderr, "Invalid argument: %s\n\n", argv[arg]);
             printf("Usage: %s [-i] [-j] [-v]\n", argv[0]);
-            printf("\t-i\tInstant mode: Skip spec-mandated sleeps.\n");
+            printf("\t-i\tInstant mode: Skip spec-mandated sleeps. Off by default.\n");
             printf("\t-j\tJoin mode: Join worker threads after they have finished, making the server blocking.\n");
             printf("\t\tBy default, threads are detached, so the server can keep accepting input\n");
-            printf("\t\twhile the worker threads are running.\n");
+            printf("\t\twhile the worker threads are running. Off by default.\n");
             printf("\t-v\tVerbose mode: print logs to stdout. Off by default.\n");
             return 1;
         }
