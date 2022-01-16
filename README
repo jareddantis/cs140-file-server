@@ -13,7 +13,7 @@ Ensure you have a working GCC compiler installed on your system, accessible thro
 Compile the server by 
 
 ```
-gcc -o file_server file_server.c
+gcc -o file_server -pthread file_server.c
 ```
 
 
@@ -29,7 +29,7 @@ The file server also accepts the following optional flags:
 
 - `-i`: Instant mode. The server will skip the sleep durations mandated in the project specification.
 - `-j`: Join mode. The server will join all worker threads, which essentially makes the file server blocking.
-- `-v`: Verbose mode. The server will print logs to stdin and stderr.
+- `-v`: Verbose mode. The server will print logs to stdout and stderr.
 
 Using a flag is as simple as `./file_server [flag] [flag2]...`. By default, the functionalities controlled by these flags are disabled.
 
