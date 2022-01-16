@@ -596,7 +596,10 @@ void *master_thread(void* arg) {
     while (1) {
         // Read user input
         printf("> ");
-        fgets(cmdline, 109, stdin);
+        if (fgets(cmdline, 109, stdin) == NULL) {
+            print_log(1, "master", "EOF reached or stdin read failed, terminating master thread.");
+            break;
+        }
 
         // Remove newline from input
         // https://stackoverflow.com/a/28462221/3350320
@@ -636,6 +639,7 @@ void *master_thread(void* arg) {
  */
 int main(int argc, char *argv[]) {
     pthread_t master;
+    file_t *curr, *next;
     int arg, join_threads = 0;
 
     // Check if the user wants to join threads
@@ -674,13 +678,24 @@ int main(int argc, char *argv[]) {
     print_log(0, "main", "Starting file server...");
     pthread_create(&master, NULL, master_thread, (void*)&join_threads);
 
-    // Wait for thread to finish
+    // Wait for master thread to finish
     pthread_join(master, NULL);
 
     // Destroy ticketing lock on open_files
     pthread_mutex_destroy(&open_files_lock->lock);
     pthread_cond_destroy(&open_files_lock->queue);
     free(open_files_lock);
+
+    // Destroy all open files
+    curr = open_files;
+    while (curr != NULL) {
+        next = curr->next;
+        pthread_mutex_destroy(&curr->lock->lock);
+        pthread_cond_destroy(&curr->lock->queue);
+        free(curr->lock);
+        free(curr);
+        curr = next;
+    }
 
     // Exit
     print_log(0, "main", "Exiting file server...");
