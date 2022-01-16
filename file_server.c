@@ -52,7 +52,7 @@ int skip_sleep = 0;
  * little package.
  */
 typedef struct {
-    char *cmdline;
+    char cmdline[109];
     int return_value;
 } thread_parcel;
 
@@ -303,7 +303,7 @@ int write_file(char *file_path, char *text, int for_user) {
     }
 
     // Write the text to the file
-    fprintf(file, "%s\n", text);
+    fprintf(file, "%s", text);
 
     // Project requirement: Wait 25ms per character written
     if (for_user && skip_sleep == 0) {
@@ -615,7 +615,7 @@ void *master_thread(void *arg) {
 
         // Create a new thread to handle the request
         parcel = malloc(sizeof(thread_parcel));
-        parcel->cmdline = cmdline;
+        strcpy(parcel->cmdline, cmdline);
         parcel->return_value = 0;
         print_log(0, "master", "Spawning new thread to handle request.");
         if (pthread_create(&thread, NULL, worker_thread, parcel) != 0)
