@@ -61,7 +61,7 @@ typedef struct {
  * Threads can request a ticket, and the server will assign them the next
  * available ticket number. If another ticket is being served currently,
  * the thread will be blocked until the current ticket is finished.
- * See ticket_enqueue() and ticket_dequeue().
+ * See ticket_lock() and ticket_unlock().
  */
 typedef struct {
     pthread_cond_t queue;
@@ -175,34 +175,35 @@ void ticket_init(queue_lock *lock) {
 }
 
 /**
- * @fn void ticket_enqueue(queue_lock *lock)
+ * @fn void ticket_lock(queue_lock *lock)
  * @brief Place the calling function into a FIFO queue of waiting threads,
  *        managed by the given queue_lock (condition variable and mutex).
- *        Adapted from https://stackoverflow.com/a/3050871/3350320
+ *        Adapted from https://stackoverflow.com/a/3050871/3350320.
  * @param lock The queue_lock to use.
  */
-void ticket_enqueue(queue_lock *lock) {
+void ticket_lock(queue_lock *lock) {
     unsigned int ticket;
 
     pthread_mutex_lock(&lock->lock);
     ticket = lock->waiting++;
     while (ticket != lock->curr) {
-        print_log(0, "ticket_enqueue", "Thread %d is waiting for ticket %d (currently serving %d)", pthread_self(), ticket, lock->curr);
+        print_log(0, "ticket_lock", "Now waiting for ticket %d (currently serving %d)", ticket, lock->curr);
         pthread_cond_wait(&lock->queue, &lock->lock);
     }
     pthread_mutex_unlock(&lock->lock);
 }
 
 /**
- * @fn void ticket_dequeue(queue_lock *lock)
+ * @fn void ticket_unlock(queue_lock *lock)
  * @brief Increments the current ticket in the queue lock and wakes up the thread
  *        holding the new ticket value.
- *        Adapted from https://stackoverflow.com/a/3050871/3350320
+ *        Adapted from https://stackoverflow.com/a/3050871/3350320.
  * @param lock The queue_lock to use.
  */
-void ticket_dequeue(queue_lock *lock) {
+void ticket_unlock(queue_lock *lock) {
     pthread_mutex_lock(&lock->lock);
     lock->curr++;
+    print_log(0, "ticket_unlock", "Now serving next ticket: %d", pthread_self(), lock->curr);
     pthread_cond_broadcast(&lock->queue);
     pthread_mutex_unlock(&lock->lock);
 }
@@ -222,7 +223,7 @@ void enqueue(char *file_path) {
 
     // Get ticket for modifying open_files
     print_log(0, "enqueue", "Received request to lock file %s", file_path);
-    ticket_enqueue(open_files_lock);
+    ticket_lock(open_files_lock);
 
     // Check if the file is already open
     while (file != NULL) {
@@ -244,8 +245,8 @@ void enqueue(char *file_path) {
     ticket_init(file->lock);
 
 acquire:
-    ticket_enqueue(file->lock);
-    ticket_dequeue(open_files_lock);
+    ticket_lock(file->lock);
+    ticket_unlock(open_files_lock);
 }
 
 /**
@@ -258,18 +259,18 @@ void dequeue(char *file_path) {
     thread_parcel *next;
 
     // Check if the file is open
-    ticket_enqueue(open_files_lock);
+    ticket_lock(open_files_lock);
     print_log(0, "dequeue", "Received request to unlock file %s", file_path);
     while (file != NULL) {
         if (strcmp(file->path, file_path) == 0) {
             // File is open, is the queue empty?
             print_log(0, "dequeue", "File %s is open, serving next ticket.", file_path);
-            ticket_dequeue(file->lock);
+            ticket_unlock(file->lock);
             break;
         }
         file = file->next;
     }
-    ticket_dequeue(open_files_lock);
+    ticket_unlock(open_files_lock);
 }
 
 /**
