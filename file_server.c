@@ -134,7 +134,7 @@ void print_log(int is_error, char *caller, char *msg, ...) {
     char *time_str = get_time();
     ssize_t msg_len;
     va_list args;
-    pthread_t thread_id = pthread_self();
+    unsigned long thread_handle = (unsigned long)pthread_self();
 
     // Don't do anything if logging is not enabled
     if (log_to_console == 0)
@@ -142,9 +142,9 @@ void print_log(int is_error, char *caller, char *msg, ...) {
     
     // Print the timestamp, log type, and caller name
     if (is_error)
-        fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR|%d] " ANSI_CYAN "%s: " ANSI_RESET, time_str, thread_id, caller);
+        fprintf(stderr, ANSI_YELLOW "[%s] " ANSI_RED "[ERR|%lu] " ANSI_CYAN "%s: " ANSI_RESET, time_str, thread_handle, caller);
     else
-        printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG|%d] " ANSI_CYAN "%s: " ANSI_RESET, time_str, thread_id, caller);
+        printf(ANSI_YELLOW "[%s] " ANSI_GREEN "[LOG|%lu] " ANSI_CYAN "%s: " ANSI_RESET, time_str, thread_handle, caller);
     
     // Enable access to variadic arguments
     va_start(args, msg);
