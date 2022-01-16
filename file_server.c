@@ -15,7 +15,7 @@ int skip_sleep = 0;
 
 /**
  * ANSI color codes for colored output.
- * See print_log() and print_log().
+ * See print_log().
  * Adapted from https://stackoverflow.com/a/3219471/3350320.
  */
 #define ANSI_RED        "\x1b[31m"
@@ -41,7 +41,7 @@ int skip_sleep = 0;
 #define REQUEST_EMPTY   3
 
 /**
- * Buffer size for reading from files.
+ * Buffer size (in bytes) for reading from files.
  */
 #define READ_BUF_SIZE   1024
 
@@ -71,7 +71,7 @@ typedef struct {
 
 /**
  * To avoid race conditions with file accesses,
- * we keep track of open files in a linked list of path-semaphore objects.
+ * we keep track of open files in a linked list of path-lock objects.
  */
 typedef struct file_t_struct file_t;
 struct file_t_struct {
@@ -87,10 +87,10 @@ queue_lock *open_files_lock = NULL;
  *****************************/
 
 /**
- * @fn int determine_request(char *cmdline)
- * @brief Determines the type of request from the command line.
+ * @fn int determine_request(char *cmd)
+ * @brief Determines the type of request from the command name.
  * 
- * @param cmdline The command line from the client.
+ * @param cmd The command name.
  * @return The type of request.
  */
 int determine_request(char *cmd) {
@@ -117,7 +117,7 @@ char *get_time() {
 }
 
 /**
- * @fn void print_log(char *msg)
+ * @fn void print_log(int is_error, char *caller, char *msg, ...)
  * @brief Print a timestamped message to stdout.
  *        This is a variadic function, meant to be called with printf-style arguments.
  *        A sample call would be
@@ -165,7 +165,7 @@ void print_log(int is_error, char *caller, char *msg, ...) {
 /**
  * @fn void ticket_init(queue_lock *lock)
  * @brief Initialize a ticket queue lock.
- * @param lock The lock to initialize.
+ * @param lock The queue_lock to initialize.
  */
 void ticket_init(queue_lock *lock) {
     pthread_cond_init(&lock->queue, NULL);
@@ -198,6 +198,7 @@ void ticket_enqueue(queue_lock *lock) {
  * @brief Increments the current ticket in the queue lock and wakes up the thread
  *        holding the new ticket value.
  *        Adapted from https://stackoverflow.com/a/3050871/3350320
+ * @param lock The queue_lock to use.
  */
 void ticket_dequeue(queue_lock *lock) {
     pthread_mutex_lock(&lock->lock);
@@ -215,7 +216,7 @@ void ticket_dequeue(queue_lock *lock) {
  * @brief Marks a file path as currently open, and waits for a lock on it.
  * @param file_path The path of the file to open.
  */
-void *enqueue(char *file_path) {
+void enqueue(char *file_path) {
     file_t *file = open_files;
     unsigned long ticket;
 
@@ -272,7 +273,7 @@ void dequeue(char *file_path) {
 }
 
 /**
- * @fn int write_file(char *file_path, char *text)
+ * @fn int write_file(char *file_path, char *text, int for_user)
  * @brief Write text to a file located at *file_path.
  *        If the file already exists, append text to it.
  *        If the file does not exist, create it and write text to it.
@@ -319,8 +320,8 @@ int write_file(char *file_path, char *text, int for_user) {
  *            <cmdline>: <contents>\n
  *        If the file does not exist, append the following to <READ_FILE>:
  *            <cmdline>: FILE DNE\n
- *        If cmdline is NULL, then this function is assumed to be called as part of another
- *        thread's operations, and should therefore not print cmdline and FILE DNE.
+ *        Or, if before_empty is non-zero, append the following to <READ_FILE>:
+ *            <cmdline>: FILE ALREADY EMPTY\n
  * 
  * @param src_path Path to the source file, consisting of at most 50 characters.
  * @param dest_path Path to the destination file, consisting of at most 50 characters.
@@ -402,12 +403,6 @@ cleanup:
 /**
  * @fn int empty_file(char *file_path, char *cmdline)
  * @brief Empty the contents of a file located at *file_path into <EMPTY_FILE>.
- *        If the file exists, append the following to <EMPTY_FILE>:
- *           <cmdline>: FILE EMPTY\n
- *        and empty the contents of the file.
- *        If the file does not exist, append the following to <EMPTY_FILE>:
- *           <cmdline>: FILE ALREADY EMPTY\n
- * 
  * @param file_path Path to the file, consisting of at most 50 characters.
  * @param cmdline Command line used to call the function.
  * @return 0 on success, -1 on failure.
@@ -446,7 +441,7 @@ int empty_file(char *file_path, char *cmdline) {
 }
 
 /**
- * @fn void *thread_cleanup(thread_parcel *parcel)
+ * @fn void thread_cleanup(thread_parcel *parcel)
  * @brief Clean up the thread, printing errors if any.
  * @param parcel thread_parcel of the thread to clean up.
  */
@@ -466,8 +461,8 @@ void thread_cleanup(thread_parcel *parcel) {
  * @brief Worker thread that handles a single user request.
  *        This thread will receive a request from the master thread,
  *        parse the request, and handle the request accordingly.
- * 
- * @return 0 on success, -1 on failure.
+ * @param arg thread_parcel of the thread
+ * @return 0 on success, -1 on failure (check (thread_parcel *)arg->return_value).
  */
 void *worker_thread(void *arg) {
     thread_parcel *parcel = (thread_parcel *)arg;
@@ -570,14 +565,15 @@ void *worker_thread(void *arg) {
 }
 
 /**
- * @fn void *master_thread()
+ * @fn void *master_thread(void* arg)
  * @brief Master thread that handles all user requests.
  *        This thread will continuously receive user requests from stdin
  *        and spawn worker threads to handle said requests accordingly,
  *        appending each command to a file named <COMMANDS_FILE> along with
  *        the timestamp of the command.
+ * @param arg Set to 1 to join spawned worker threads and 0 to detach them.
  */
-void *master_thread(void* arg) {
+void *master_thread(void *arg) {
     // The longest command name is 5 characters,
     // and the file path and text are both at most 50 characters,
     // therefore including whitespace each command line is at most 107 characters.
@@ -626,10 +622,13 @@ void *master_thread(void* arg) {
 }
 
 /**
- * @fn int main(...)
+ * @fn int main(int argc, char *argv[])
  * @brief Main function.
  *        This function will initialize all semaphores
  *        and spawn the master thread.
+ * @param argc Number of command line arguments.
+ * @param argv Array of command line arguments.
+ * @return 0 on success, 1 on failure.
  */
 int main(int argc, char *argv[]) {
     pthread_t master;
