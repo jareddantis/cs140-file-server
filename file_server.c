@@ -186,8 +186,10 @@ void ticket_enqueue(queue_lock *lock) {
 
     pthread_mutex_lock(&lock->lock);
     ticket = lock->waiting++;
-    while (ticket != lock->curr)
+    while (ticket != lock->curr) {
+        print_log(0, "ticket_enqueue", "Thread %d is waiting for ticket %d (currently serving %d)", pthread_self(), ticket, lock->curr);
         pthread_cond_wait(&lock->queue, &lock->lock);
+    }
     pthread_mutex_unlock(&lock->lock);
 }
 
