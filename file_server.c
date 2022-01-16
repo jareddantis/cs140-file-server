@@ -8,6 +8,13 @@
 #include <unistd.h>
 
 /**
+ * file_server.c
+ * submitted by DANTIS, Aurel Jared C. (student number ***REMOVED***)
+ * in partial fulfillment of the requirements of the CS 140 course
+ * for the first semester of Academic Year 2021-2022
+ */
+
+/**
  * Debug flags (see main())
  */
 int log_to_console = 0;
