@@ -478,7 +478,7 @@ void thread_cleanup(thread_parcel *parcel) {
  * @return 0 on success, -1 on failure.
  */
 void *worker_thread(void *arg) {
-    thread_parcel *dummy, *parcel = (thread_parcel *)arg;
+    thread_parcel *parcel = (thread_parcel *)arg;
     char *cmdline, *cmd, *file_path, text[51];
     int request_type, preceding_len, text_len;
     int wait_s, wait_prob = rand() % 100;
